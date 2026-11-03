@@ -42,6 +42,7 @@ const MOBILE_TABS = [
 ] as const
 
 const SECTION_TITLES: Array<[string, string]> = [
+  ['/flight', 'Flight'],
   ['/logbook', 'Logbook'],
   ['/trips', 'Trips'],
   ['/explore', 'Explore'],
@@ -118,6 +119,7 @@ export function AppShell() {
           <Link to="/" className="sidebar__brand">
             <span className="sidebar__brand-mark">G</span>
             <span className="sidebar__brand-rest">floge</span>
+            <span className="sidebar__brand-dot" aria-hidden="true" />
           </Link>
           {viewsDesktop || collapsed ? (
             <button
@@ -152,10 +154,13 @@ export function AppShell() {
         <div className="sidebar__foot">
           {displayName ? (
             <>
-              <div className="sidebar__user sidebar__label">{displayName}</div>
-              <button type="button" className="btn-outline sidebar__signout" onClick={() => signOut.mutate()}>
-                Sign out
-              </button>
+              <div className="sidebar__account">
+                <span className="sidebar__avatar" aria-hidden="true">{displayName.slice(0, 1).toUpperCase()}</span>
+                <span className="sidebar__user sidebar__label">{displayName}</span>
+                <button type="button" className="sidebar__signout sidebar__label" onClick={() => signOut.mutate()}>
+                  Sign out
+                </button>
+              </div>
             </>
           ) : null}
         </div>

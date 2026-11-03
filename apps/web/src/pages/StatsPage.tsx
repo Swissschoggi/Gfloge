@@ -34,7 +34,12 @@ export function StatsPage() {
 
   return (
     <div className="page">
-      <h1 style={{ fontSize: 'var(--step-2)' }}>Stats</h1>
+      <header className="pagehead">
+        <div>
+          <h1 className="pagehead__title">Stats</h1>
+          <p className="pagehead__sub">Counts completed (flown) entries only; planned trips are excluded.</p>
+        </div>
+      </header>
       {s.flights === 0 ? (
         <>
           <RouteSchematic variant="route" />
@@ -47,10 +52,7 @@ export function StatsPage() {
         </>
       ) : (
         <>
-          <p className="attribution">
-            Counts completed (flown) entries only; planned trips are excluded.
-          </p>
-          <div className="statgrid">
+          <div className="statstrip">
             <StatBlock value={String(s.flights)} label="Flights flown" />
             <StatBlock value={formatDistance(s.distanceKm)} label="Distance" />
             <StatBlock value={formatDuration(s.minutes)} label="Time in the air" />
@@ -63,11 +65,11 @@ export function StatsPage() {
             <h2 className="data-panel__title">Distance per year</h2>
             {s.perYear.map((y) => (
               <div className="barchart__row" key={y.year}>
-                <span className="mono">{y.year}</span>
-                <span>
+                <span className="barchart__label">{y.year}</span>
+                <span className="barchart__track">
                   <span className="barchart__bar" style={{ width: `${Math.round((y.distanceKm / maxKm) * 100)}%` }} />
                 </span>
-                <span style={{ textAlign: 'right' }}>{formatDistance(y.distanceKm)}</span>
+                <span className="barchart__value">{formatDistance(y.distanceKm)}</span>
               </div>
             ))}
           </div>
@@ -84,11 +86,9 @@ export function StatsPage() {
 
 function StatBlock({ value, label }: { value: string; label: string }) {
   return (
-    <div className="data-panel" style={{ padding: 'var(--space-m)' }}>
-      <div className="statblock">
-        <span className="statblock__value">{value}</span>
-        <span className="statblock__label">{label}</span>
-      </div>
+    <div className="stattile">
+      <span className="stattile__value">{value}</span>
+      <span className="stattile__label">{label}</span>
     </div>
   )
 }

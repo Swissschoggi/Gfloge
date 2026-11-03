@@ -1,18 +1,26 @@
-import { Link } from 'react-router'
-import { useSearchParams } from 'react-router'
-import { useState } from 'react'
+import { Link, useSearchParams } from 'react-router'
 import { useQuery } from '@tanstack/react-query'
 import type { BoardPayload, FlightRead } from '@gfloge/shared'
 import { api } from '../api/client'
 import { StatusBadge, ConditionChip, statusLabel } from '../components/StatusPresentation'
-import { formatDuration, formatLocal, formatDate, sameUtcDay, timeBasisLabel } from '../format'
+import { formatDuration, formatLocal, formatDate, sameUtcDay } from '../format'
 import { RouteSchematic } from '../components/RouteSchematic'
 
 const SKELETON_ROWS = 3
 
+const STATUS_FILTERS: Array<[string, string]> = [
+  ['all', 'All'],
+  ['enroute', 'En route'],
+  ['boarding', 'Boarding'],
+  ['scheduled', 'Scheduled'],
+  ['arrived', 'Arrived'],
+  ['cancelled', 'Cancelled'],
+  ['diverted', 'Diverted'],
+]
+
 export function BoardPage() {
   const [searchParams, setSearchParams] = useSearchParams()
-  const [searchDraft, setSearchDraft] = useState(searchParams.get('q') ?? '')
+  const query = searchParams.get('q') ?? ''
   const statusFilter = searchParams.get('status') ?? 'all'
   const board = useQuery({
     queryKey: ['board'],
@@ -22,18 +30,11 @@ export function BoardPage() {
 
   if (board.isPending) {
     return (
-      <div className="page">
-        <div className="board-group" aria-hidden="true">
-          {Array.from({ length: SKELETON_ROWS }).map((_, i) => (
-            <div className="board-row" key={i} style={{ minHeight: 56 }}>
-              <span className="airline-mark">···</span>
-              <span className="board-flightcode" style={{ color: 'var(--ink-3)' }}>
-                loading flights…
-              </span>
-            </div>
-          ))}
-        </div>
-        <p className="attribution">Board loading.</p>
+      <div className="page" aria-busy="true">
+        <p className="sr-only">Board loading.</p>
+        {Array.from({ length: SKELETON_ROWS }).map((_, i) => (
+          <div className="flightcard flightcard--skeleton" key={i} aria-hidden="true" />
+        ))}
       </div>
     )
   }
@@ -56,7 +57,7 @@ export function BoardPage() {
   const allItems = [...data.active, ...data.upcoming, ...data.landed]
   const filtered = allItems.filter((item) => {
     const text = `${item.flight.flightCode} ${item.flight.airline?.name ?? ''} ${item.flight.departure.iata ?? ''} ${item.flight.arrival.iata ?? ''} ${item.flight.departure.city} ${item.flight.arrival.city}`.toLowerCase()
-    return (!searchParams.get('q') || text.includes(searchParams.get('q')!.toLowerCase())) &&
+    return (!query || text.includes(query.toLowerCase())) &&
       (statusFilter === 'all' || item.flight.status === statusFilter)
   })
   const filteredIds = new Set(filtered.map((item) => item.userFlightId))
@@ -83,49 +84,64 @@ export function BoardPage() {
       ) : (
         <>
           <header className="board-masthead">
-            <h1 className="board-masthead__title">Board</h1>
-            <div className="board-masthead__readout">
-              <span className="board-masthead__value">{active.length}</span>
-              <span className="board-masthead__label">in the air</span>
+            <div>
+              <h1 className="board-masthead__title">Board</h1>
+              <p className="board-masthead__sub">
+                Updated {new Date(data.generatedAt).toLocaleTimeString(undefined, { hour: '2-digit', minute: '2-digit' })} · refreshes every 30s
+              </p>
             </div>
-            <div className="board-masthead__readout">
-              <span className="board-masthead__value">{upcoming.length}</span>
-              <span className="board-masthead__label">upcoming</span>
-            </div>
-            <div className="board-masthead__readout">
-              <span className="board-masthead__value">{landed.length}</span>
-              <span className="board-masthead__label">landed</span>
-            </div>
+            <dl className="board-masthead__stats">
+              <div className="board-masthead__readout board-masthead__readout--live">
+                <dt className="board-masthead__label">In the air</dt>
+                <dd className="board-masthead__value">{active.length}</dd>
+              </div>
+              <div className="board-masthead__readout">
+                <dt className="board-masthead__label">Upcoming</dt>
+                <dd className="board-masthead__value">{upcoming.length}</dd>
+              </div>
+              <div className="board-masthead__readout">
+                <dt className="board-masthead__label">Landed</dt>
+                <dd className="board-masthead__value">{landed.length}</dd>
+              </div>
+            </dl>
           </header>
-          <div className="data-panel board-filters">
-            <div className="field" style={{ margin: 0 }}>
-              <label htmlFor="board-search">Search followed flights</label>
-              <input id="board-search" className="input" value={searchDraft} onChange={(event) => setSearchDraft(event.target.value)} onKeyDown={(event) => { if (event.key === 'Enter') setSearchParams((current) => { if (searchDraft) current.set('q', searchDraft); else current.delete('q'); return current }) }} placeholder="Flight, airline, airport, or city" />
+          <div className="toolbar">
+            <div className="searchfield">
+              <svg aria-hidden="true" viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round">
+                <circle cx="11" cy="11" r="6.5" />
+                <path d="M16 16l4.5 4.5" />
+              </svg>
+              <label htmlFor="board-search" className="sr-only">Search followed flights</label>
+              <input
+                id="board-search"
+                type="search"
+                value={query}
+                onChange={(event) => {
+                  const value = event.target.value
+                  setSearchParams((current) => { if (value) current.set('q', value); else current.delete('q'); return current }, { replace: true })
+                }}
+                placeholder="Search flight, airline, airport or city"
+              />
             </div>
-            <div className="field" style={{ margin: 0 }}>
-              <label htmlFor="board-status">Operational status</label>
-              <select id="board-status" className="select" value={statusFilter} onChange={(event) => setSearchParams((current) => { if (event.target.value === 'all') current.delete('status'); else current.set('status', event.target.value); return current })}>
-                <option value="all">All statuses</option>
-                <option value="scheduled">Scheduled</option>
-                <option value="boarding">Boarding</option>
-                <option value="enroute">En route</option>
-                <option value="arrived">Arrived</option>
-                <option value="cancelled">Cancelled</option>
-                <option value="diverted">Diverted</option>
-              </select>
+            <div className="chips" role="group" aria-label="Operational status">
+              {STATUS_FILTERS.map(([value, label]) => (
+                <button
+                  key={value}
+                  type="button"
+                  className="chip"
+                  aria-pressed={statusFilter === value}
+                  onClick={() => setSearchParams((current) => { if (value === 'all') current.delete('status'); else current.set('status', value); return current }, { replace: true })}
+                >
+                  {label}
+                </button>
+              ))}
             </div>
-            <button type="button" className="btn-outline" onClick={() => { setSearchDraft(''); setSearchParams({}) }}>Clear</button>
-            <button type="button" className="btn" onClick={() => setSearchParams((current) => { if (searchDraft) current.set('q', searchDraft); else current.delete('q'); return current })}>Search</button>
           </div>
-          {noMatches ? <div className="data-panel"><p>No followed flights match “{searchParams.get('q') ?? statusFilter}”.</p><button className="quietlink" type="button" onClick={() => { setSearchDraft(''); setSearchParams({}) }}>Clear filters</button></div> : <>
+          {noMatches ? <div className="data-panel"><p>No followed flights match “{query || statusLabel(statusFilter as FlightRead['status'])}”.</p><button className="quietlink" type="button" onClick={() => setSearchParams({}, { replace: true })}>Clear filters</button></div> : <>
           <Group title="Active and boarding" items={active} emptyText="No flight in the air right now." />
           <Group title="Upcoming" items={upcoming} emptyText="No further flights ahead." />
           <Group title="Landed recently" items={landed} emptyText="No landings in the last 24 hours." />
           </>}
-          <p className="attribution">
-            Board generated {new Date(data.generatedAt).toLocaleTimeString(undefined, { hour: '2-digit', minute: '2-digit' })}. Statuses update
-            automatically every 30s.
-          </p>
         </>
       )}
     </div>
@@ -165,42 +181,56 @@ export function BoardRow({
   lastUpdate: string | null
 }) {
   const today = new Date().toISOString()
-  const depDate = formatDate(flight.scheduledDeparture, flight.departure.tz)
+  const depIso = flight.actualDeparture ?? flight.scheduledDeparture
+  const arrIso = flight.actualArrival ?? flight.scheduledArrival
+  const minutes = Math.round((new Date(arrIso).getTime() - new Date(depIso).getTime()) / 60_000)
+  const progress =
+    flight.status === 'enroute'
+      ? Math.min(1, Math.max(0, (Date.now() - new Date(depIso).getTime()) / Math.max(1, new Date(arrIso).getTime() - new Date(depIso).getTime())))
+      : flight.status === 'arrived'
+        ? 1
+        : 0
+  const note = relation === 'planned' ? 'Planned trip' : relation === 'logged' ? 'From your logbook' : flight.airline?.name ?? 'Self entered'
+  const depDay = sameUtcDay(flight.scheduledDeparture, today) ? null : formatDate(flight.scheduledDeparture, flight.departure.tz)
+  const arrDay = sameUtcDay(flight.scheduledArrival, today) ? null : formatDate(flight.scheduledArrival, flight.arrival.tz)
   return (
-    <Link to={`/flight/${flight.id}`} className="board-row">
-      <StatusBadge status={flight.status} />
-      <span className="airline-mark" aria-label={flight.airline?.name ?? 'self entered'}>
-        {flight.airline?.iata ?? '…'}
-      </span>
-      <span>
-        <span className="board-flightcode">{flight.flightCode}</span>
-        <span className="board-route" style={{ marginInlineStart: 'var(--space-s)' }}>
-          {flight.departure.iata} → {flight.arrival.iata}
+    <Link to={`/flight/${flight.id}`} className="flightcard" data-status={flight.status}>
+      <div className="flightcard__id">
+        <span className="airline-mark" aria-label={flight.airline?.name ?? 'self entered'}>
+          {flight.airline?.iata ?? '…'}
         </span>
-        <span className="readout-row__meta">{relation === 'planned' ? 'planned trip' : relation === 'logged' ? 'from your logbook' : flight.airline?.name ?? 'self entered'}</span>
-      </span>
-      <span className="board-times">
-        {formatLocal(flight.scheduledDeparture, flight.departure.tz)}
-        <small>
-          {timeBasisLabel(flight.departure.iata ?? '?', flight.departure.tz)}{sameUtcDay(flight.scheduledDeparture, today) ? '' : ` · ${depDate}`}
-        </small>
-      </span>
-      <span aria-hidden="true" />
-      {condition === 'fresh' ? (
-        <span className="board-times">
-          {formatLocal(flight.actualArrival ?? flight.scheduledArrival, flight.arrival.tz)}
-          <small>
-            {flight.arrival.iata} local{sameUtcDay(flight.scheduledArrival, today) ? '' : ` · ${formatDate(flight.scheduledArrival, flight.arrival.tz)}`} ·{' '}
-            {function () {
-              const dep = new Date(flight.actualDeparture ?? flight.scheduledDeparture)
-              const arr = new Date(flight.actualArrival ?? flight.scheduledArrival)
-              return formatDuration(Math.round((arr.getTime() - dep.getTime()) / 60_000))
-            }()}{' '}
-            · {statusLabel(flight.status).toLowerCase()}
-          </small>
+        <span className="flightcard__idtext">
+          <span className="flightcard__code">{flight.flightCode}</span>
+          <span className="flightcard__note">{note}</span>
         </span>
-      ) : null}
-      <ConditionChip condition={condition} timestamp={lastUpdate} />
+      </div>
+
+      <div className="flightcard__route">
+        <div className="flightcard__end">
+          <span className="flightcard__iata">{flight.departure.iata}</span>
+          <span className="flightcard__city">{flight.departure.city}</span>
+          <span className="flightcard__time">{formatLocal(flight.scheduledDeparture, flight.departure.tz)}</span>
+          <span className="flightcard__day">{depDay ?? 'Today'}</span>
+        </div>
+        <div className="flightcard__track" aria-hidden="true">
+          <span className="flightcard__line">
+            <span className="flightcard__progress" style={{ width: `${Math.round(progress * 100)}%` }} />
+            {flight.status === 'enroute' && <span className="flightcard__plane" style={{ left: `${Math.round(progress * 100)}%` }} />}
+          </span>
+          <span className="flightcard__dur">{formatDuration(minutes)}</span>
+        </div>
+        <div className="flightcard__end flightcard__end--arr">
+          <span className="flightcard__iata">{flight.arrival.iata}</span>
+          <span className="flightcard__city">{flight.arrival.city}</span>
+          <span className="flightcard__time">{condition === 'fresh' ? formatLocal(arrIso, flight.arrival.tz) : '—'}</span>
+          <span className="flightcard__day">{arrDay ?? 'Today'}</span>
+        </div>
+      </div>
+
+      <div className="flightcard__status">
+        <StatusBadge status={flight.status} />
+        <ConditionChip condition={condition} timestamp={lastUpdate} />
+      </div>
     </Link>
   )
 }

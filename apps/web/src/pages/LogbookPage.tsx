@@ -56,45 +56,45 @@ export function LogbookPage() {
 
   return (
     <div className="page">
-      <div style={{ display: 'flex', gap: 'var(--space-s)', alignItems: 'baseline', flexWrap: 'wrap' }}>
-        <h1 style={{ fontSize: 'var(--step-2)', margin: 0 }}>Logbook</h1>
-        <a className="btn-outline" href="/api/v1/export/logbook.csv" download>
-          Export CSV
-        </a>
-        <Link to="/add" className="btn" style={{ marginInlineStart: 'auto' }}>
-          Log or track a flight
-        </Link>
-        <Link to="/trips" className="btn-outline">Trips</Link>
-      </div>
+      <header className="pagehead">
+        <div>
+          <h1 className="pagehead__title">Logbook</h1>
+          <p className="pagehead__sub">Every flight you have flown, planned or noted down.</p>
+        </div>
+        <div className="pagehead__actions">
+          <a className="btn-outline" href="/api/v1/export/logbook.csv" download>
+            Export CSV
+          </a>
+          <Link to="/trips" className="btn-outline">Trips</Link>
+          <Link to="/add" className="btn">
+            Log or track a flight
+          </Link>
+        </div>
+      </header>
 
       {stats.data && <StatRow stats={stats.data} />}
 
-      <div className="data-panel" style={{ rowGap: 'var(--space-2xs)', display: 'grid', gridTemplateColumns: '1fr auto auto', alignItems: 'end' }}>
-        <div className="field" style={{ margin: 0 }}>
-          <label htmlFor="lb-q">Search</label>
-          <input id="lb-q" className="input" value={q} onChange={(e) => setQ(e.target.value)} placeholder="Flight, airline, city, seat..." />
+      <div className="toolbar">
+        <div className="searchfield">
+          <svg aria-hidden="true" viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round">
+            <circle cx="11" cy="11" r="6.5" />
+            <path d="M16 16l4.5 4.5" />
+          </svg>
+          <label htmlFor="lb-q" className="sr-only">Search</label>
+          <input id="lb-q" type="search" value={q} onChange={(e) => setQ(e.target.value)} placeholder="Search flight, airline, city or seat" />
         </div>
-        <div className="field" style={{ margin: 0 }}>
-          <label htmlFor="lb-year">Year</label>
-          <select id="lb-year" className="select" style={{ width: 140 }} value={year} onChange={(e) => setYear(e.target.value)}>
-            <option value="">All years</option>
-            {data.years.map((y) => (
-              <option key={y} value={y}>
-                {y}
-              </option>
-            ))}
-          </select>
-        </div>
+        <label htmlFor="lb-year" className="sr-only">Year</label>
+        <select id="lb-year" className="select select--compact" value={year} onChange={(e) => setYear(e.target.value)}>
+          <option value="">All years</option>
+          {data.years.map((y) => (
+            <option key={y} value={y}>
+              {y}
+            </option>
+          ))}
+        </select>
         {(q !== '' || year !== '') && (
-          <button
-            type="button"
-            className="btn-outline"
-            onClick={() => {
-              setQ('')
-              setYear('')
-            }}
-          >
-            Clear filters
+          <button type="button" className="btn-ghost" onClick={() => { setQ(''); setYear('') }}>
+            Clear
           </button>
         )}
       </div>
@@ -113,9 +113,9 @@ export function LogbookPage() {
         </>
       ) : (
         <>
-          <Group title={`Flown · ${data.flown.length}`} items={data.flown} onDelete={(id) => remove.mutate(id)} deleting={remove.isPending} />
-          {data.planned.length > 0 && <Group title={`Planned trips · ${data.planned.length}`} items={data.planned} onDelete={(id) => remove.mutate(id)} deleting={remove.isPending} planned />}
-          {data.manual.length > 0 && <Group title={`Self-entered · ${data.manual.length}`} items={data.manual} onDelete={(id) => remove.mutate(id)} deleting={remove.isPending} />}
+          <Group title="Flown" count={data.flown.length} items={data.flown} onDelete={(id) => remove.mutate(id)} deleting={remove.isPending} />
+          {data.planned.length > 0 && <Group title="Planned trips" count={data.planned.length} items={data.planned} onDelete={(id) => remove.mutate(id)} deleting={remove.isPending} planned />}
+          {data.manual.length > 0 && <Group title="Self-entered" count={data.manual.length} items={data.manual} onDelete={(id) => remove.mutate(id)} deleting={remove.isPending} />}
         </>
       )}
     </div>
@@ -124,7 +124,7 @@ export function LogbookPage() {
 
 function StatRow({ stats }: { stats: StatsPayload }) {
   return (
-    <div className="statgrid">
+    <div className="statstrip">
       <StatBlock value={String(stats.flights)} label="Flights flown" />
       <StatBlock value={formatDistance(stats.distanceKm)} label="Distance" />
       <StatBlock value={formatDuration(stats.minutes)} label="Time in the air" />
@@ -138,23 +138,23 @@ function StatRow({ stats }: { stats: StatsPayload }) {
 
 function StatBlock({ value, label }: { value: string; label: string }) {
   return (
-    <div className="data-panel" style={{ padding: 'var(--space-m)' }}>
-      <div className="statblock">
-        <span className="statblock__value">{value}</span>
-        <span className="statblock__label">{label}</span>
-      </div>
+    <div className="stattile">
+      <span className="stattile__value">{value}</span>
+      <span className="stattile__label">{label}</span>
     </div>
   )
 }
 
 function Group({
   title,
+  count,
   items,
   planned,
   onDelete,
   deleting,
 }: {
   title: string
+  count: number
   items: UserFlightItem[]
   planned?: boolean
   onDelete: (id: string) => void
@@ -162,7 +162,7 @@ function Group({
 }) {
   return (
     <section className="board-group" aria-label={title}>
-      <h2 className="board-group__title">{title}</h2>
+      <h2 className="board-group__title">{title} <span className="board-group__count">{count}</span></h2>
       <div className="logtable-wrap">
         <table className="logtable">
           <thead>
@@ -170,9 +170,7 @@ function Group({
               <th scope="col">Date</th>
               <th scope="col">Flight</th>
               <th scope="col">Route</th>
-              <th scope="col" className="mono">
-                Dep · Arr local
-              </th>
+              <th scope="col">Dep – Arr</th>
               <th scope="col">Aircraft</th>
               <th scope="col">Cabin</th>
               <th scope="col">Seat</th>
@@ -186,28 +184,38 @@ function Group({
           <tbody>
             {items.map((it) => (
               <tr key={it.id}>
-                <td className="mono">{flightDate(it.flight)}</td>
-                <td>
-                  <Link to={`/flight/${it.flight.id}`} className="board-flightcode" style={{ textDecoration: 'none', color: 'var(--accent-ink)' }}>
+                <td className="mono" data-label="Date">{flightDate(it.flight)}</td>
+                <td data-label="Flight" className="logtable__flight">
+                  <Link to={`/flight/${it.flight.id}`} className="logtable__code">
                     {it.flight.flightCode}
                   </Link>
-                  {planned && <span className="relation-chip" style={{ marginInlineStart: 'var(--space-2xs)' }}>planned</span>}
+                  {planned && <span className="relation-chip">planned</span>}
                 </td>
-                <td className="mono">
-                  {it.flight.departure.iata} → {it.flight.arrival.iata}
+                <td className="mono" data-label="Route">
+                  {it.flight.departure.iata} <span className="logtable__arrow">→</span> {it.flight.arrival.iata}
                 </td>
-                <td className="mono">
-                  {formatLocal(it.flight.scheduledDeparture, it.flight.departure.tz)} · {formatLocal(it.flight.scheduledArrival, it.flight.arrival.tz)}
+                <td className="mono logtable__times" data-label="Dep · Arr">
+                  {formatLocal(it.flight.scheduledDeparture, it.flight.departure.tz)} – {formatLocal(it.flight.scheduledArrival, it.flight.arrival.tz)}
                 </td>
-                <td>
-                  {it.flight.aircraft?.registration ?? 'n/a'} {it.flight.aircraft?.icaoType ? `(${it.flight.aircraft.icaoType})` : ''}
+                <td data-label="Aircraft">
+                  <span className="logtable__aircraft">{it.flight.aircraft?.registration ?? '—'}</span>
+                  {it.flight.aircraft?.icaoType ? <span className="logtable__type">{it.flight.aircraft.icaoType}</span> : null}
                 </td>
-                <td>{it.cabin === 'none' ? 'n/a' : it.cabin}</td>
-                <td className="mono">{it.seat ?? 'n/a'}</td>
-                <td className="mono">{it.rating ?? 'n/a'}</td>
-                <td style={{ maxWidth: 260 }}>{it.note ?? ''}</td>
-                <td>
-                  <button type="button" className="btn-danger" style={{ minHeight: 40, padding: 'var(--space-2xs) var(--space-s)' }} disabled={deleting} onClick={() => onDelete(it.id)}>
+                <td data-label="Cabin">{it.cabin === 'none' ? <span className="muted">—</span> : <span className="tag">{it.cabin}</span>}</td>
+                <td className="mono" data-label="Seat">{it.seat ?? <span className="muted">—</span>}</td>
+                <td data-label="Rating">
+                  {it.rating ? (
+                    <span className="stars" role="img" aria-label={`${it.rating} out of 5`}>
+                      {'★'.repeat(it.rating)}
+                      <span className="stars__off">{'★'.repeat(5 - it.rating)}</span>
+                    </span>
+                  ) : (
+                    <span className="muted">—</span>
+                  )}
+                </td>
+                <td className="logtable__note" data-label="Note">{it.note ?? ''}</td>
+                <td className="logtable__actions">
+                  <button type="button" className="btn-quiet-danger" disabled={deleting} onClick={() => onDelete(it.id)} aria-label={`Delete ${it.flight.flightCode}`}>
                     Delete
                   </button>
                 </td>

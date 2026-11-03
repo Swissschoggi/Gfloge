@@ -19,6 +19,7 @@ import './styles/layout.css'
 import './styles/pages.css'
 import './styles/status.css'
 import './styles/data.css'
+import './styles/polish.css'
 
 const queryClient = new QueryClient({
   defaultOptions: {

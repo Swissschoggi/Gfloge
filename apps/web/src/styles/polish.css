@@ -1,0 +1,519 @@
+/* Gfloge visual refinement layer.
+   Loaded last: restyles the shell, board, logbook, stats and flight dossier.
+   Keeps the brand (warm paper / night ops, flare orange, Instrument Serif +
+   Sans, Plex Mono data) and the token system; only adds structure, rhythm and
+   softer surfaces. */
+
+:root {
+  --radius: 8px;                       /* still ONE radius, just less harsh */
+  --card-shadow: var(--shadow-near);
+  --page-gap: var(--space-l);
+}
+
+/* ===== Global rhythm & type ===== */
+
+.page { gap: var(--page-gap); grid-template-columns: minmax(0, 1fr); }
+
+h1 {
+  font-family: var(--font-display);
+  font-weight: 400;
+  font-size: var(--step-4);
+  line-height: 1.05;
+  letter-spacing: -0.02em;
+}
+
+h2 { font-weight: 600; }
+
+.main { padding: var(--space-xl) var(--space-xl) var(--space-3xl); }
+.main__inner { max-width: 72rem; }
+
+.muted { color: var(--ink-3); }
+
+/* Surfaces */
+.data-panel,
+.authcard {
+  border-radius: var(--radius);
+  box-shadow: var(--card-shadow);
+}
+.data-panel { padding: var(--space-l); gap: var(--space-xs); }
+.data-panel__title { margin-bottom: var(--space-2xs); }
+
+/* ===== Controls ===== */
+
+.btn,
+.btn-outline,
+.btn-danger,
+.btn-ghost {
+  min-height: 42px;
+  padding: var(--space-xs) var(--space-m);
+  font-size: var(--step--1);
+  font-weight: 600;
+  justify-content: center;
+  transition: background-color var(--dur-fast) var(--ease), border-color var(--dur-fast) var(--ease), box-shadow var(--dur-fast) var(--ease);
+}
+.btn { box-shadow: var(--shadow-near); }
+.btn:hover { box-shadow: var(--shadow-far); }
+.btn-outline { border-color: var(--line-strong); }
+.btn-outline:hover { border-color: var(--ink-3); }
+
+.btn-ghost {
+  display: inline-flex;
+  align-items: center;
+  color: var(--ink-2);
+  border-radius: var(--radius);
+}
+.btn-ghost:hover { background: var(--surface-2); color: var(--ink); }
+
+.btn-quiet-danger {
+  padding: var(--space-2xs) var(--space-xs);
+  border-radius: var(--radius);
+  color: var(--ink-3);
+  font-size: var(--step--1);
+  transition: background-color var(--dur-fast) var(--ease), color var(--dur-fast) var(--ease);
+}
+.btn-quiet-danger:hover:not(:disabled) { background: color-mix(in srgb, var(--danger) 12%, transparent); color: var(--danger); }
+.btn-quiet-danger:disabled { opacity: .5; }
+
+.input, .select, .textarea {
+  border-color: var(--line-strong);
+  transition: border-color var(--dur-fast) var(--ease), box-shadow var(--dur-fast) var(--ease);
+}
+.input:focus, .select:focus, .textarea:focus {
+  outline: none;
+  border-color: var(--focus);
+  box-shadow: 0 0 0 3px color-mix(in srgb, var(--focus) 25%, transparent);
+}
+.select--compact { width: auto; min-width: 9rem; min-height: 42px; }
+
+/* Toolbar: search + filters on one calm row */
+.toolbar {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--space-s);
+}
+
+.searchfield {
+  position: relative;
+  flex: 1 1 18rem;
+  min-width: 0;
+  color: var(--ink-3);
+}
+.searchfield svg {
+  position: absolute;
+  inset-block: 0;
+  inset-inline-start: var(--space-s);
+  margin-block: auto;
+  pointer-events: none;
+}
+.searchfield input {
+  width: 100%;
+  min-height: 42px;
+  padding: var(--space-xs) var(--space-s) var(--space-xs) calc(var(--space-s) + 26px);
+  font: inherit;
+  color: var(--ink);
+  background: var(--surface);
+  border: var(--border-strong);
+  border-radius: var(--radius);
+  transition: border-color var(--dur-fast) var(--ease), box-shadow var(--dur-fast) var(--ease);
+}
+.searchfield input::placeholder { color: var(--ink-3); }
+.searchfield input:focus {
+  outline: none;
+  border-color: var(--focus);
+  box-shadow: 0 0 0 3px color-mix(in srgb, var(--focus) 25%, transparent);
+}
+
+.chips {
+  display: flex;
+  gap: var(--space-xs);
+  overflow-x: auto;
+  scrollbar-width: none;
+  max-width: 100%;
+}
+.chips::-webkit-scrollbar { display: none; }
+.chip {
+  flex: none;
+  min-height: 36px;
+  padding: var(--space-2xs) var(--space-s);
+  border: var(--border);
+  border-radius: var(--radius);
+  background: var(--surface);
+  color: var(--ink-2);
+  font-size: var(--step--1);
+  font-weight: 500;
+  cursor: pointer;
+  transition: background-color var(--dur-fast) var(--ease), color var(--dur-fast) var(--ease), border-color var(--dur-fast) var(--ease);
+}
+.chip:hover { border-color: var(--line-strong); color: var(--ink); }
+.chip[aria-pressed="true"] { background: var(--ink); border-color: var(--ink); color: var(--bg); }
+
+/* ===== Shell ===== */
+
+.sidebar { box-shadow: none; }
+.sidebar__head { padding-top: var(--space-l); padding-bottom: var(--space-s); }
+.sidebar__brand { font-size: var(--step-3); gap: 0; }
+.sidebar__brand-dot {
+  width: 6px; height: 6px;
+  margin-inline-start: var(--space-2xs);
+  align-self: flex-end;
+  margin-bottom: 0.28em;
+  background: var(--accent);
+  border-radius: 50%;
+}
+.sidebar--rail .sidebar__brand-dot { display: none; }
+
+.sidebar__list + .sidebar__list { margin-top: var(--space-m); }
+.navgroup { margin: 0 0 var(--space-2xs); padding-inline: var(--space-s); }
+.navitem { border-left: 0; position: relative; }
+.navitem[aria-current="page"] {
+  background: var(--accent-soft);
+  color: var(--ink);
+  font-weight: 600;
+}
+.navitem[aria-current="page"] .navitem__icon { color: var(--accent-ink); }
+.navitem[aria-current="page"]::before {
+  content: "";
+  position: absolute;
+  inset-block: 8px;
+  inset-inline-start: 0;
+  width: 3px;
+  border-radius: 0 3px 3px 0;
+  background: var(--accent);
+}
+
+.sidebar__foot { border-top: var(--border); }
+.sidebar__account {
+  display: grid;
+  grid-template-columns: auto 1fr;
+  grid-template-areas: "avatar user" "avatar out";
+  column-gap: var(--space-s);
+  align-items: center;
+}
+.sidebar__avatar {
+  grid-area: avatar;
+  display: grid;
+  place-items: center;
+  width: 36px; height: 36px;
+  border-radius: 50%;
+  background: var(--ink);
+  color: var(--bg);
+  font-family: var(--font-display);
+  font-size: var(--step-1);
+}
+.sidebar__user { grid-area: user; color: var(--ink); font-weight: 600; line-height: 1.2; }
+.sidebar__signout {
+  grid-area: out;
+  justify-self: start;
+  width: auto;
+  margin: 0;
+  padding: 0;
+  color: var(--ink-3);
+  font-size: var(--step--1);
+  cursor: pointer;
+}
+.sidebar__signout:hover { color: var(--accent-ink); text-decoration: underline; }
+.sidebar--rail .sidebar__account { grid-template-columns: 1fr; grid-template-areas: "avatar"; justify-items: center; }
+
+.topbar {
+  background: color-mix(in srgb, var(--surface) 82%, transparent);
+  -webkit-backdrop-filter: blur(10px);
+  backdrop-filter: blur(10px);
+}
+
+/* ===== Page heads ===== */
+
+.pagehead {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: flex-end;
+  justify-content: space-between;
+  gap: var(--space-m) var(--space-l);
+}
+.pagehead__title { margin: 0; }
+.pagehead__sub { margin-top: var(--space-2xs); color: var(--ink-2); font-size: var(--step--1); }
+.pagehead__actions { display: flex; flex-wrap: wrap; gap: var(--space-xs); }
+
+/* ===== Board ===== */
+
+.board-masthead {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: flex-end;
+  justify-content: space-between;
+  gap: var(--space-m) var(--space-xl);
+  padding: 0;
+  border-bottom: 0;
+}
+.board-masthead__title { font-family: var(--font-display); font-weight: 400; font-size: var(--step-5); line-height: 1; letter-spacing: -0.02em; }
+.board-masthead__sub { margin-top: var(--space-xs); color: var(--ink-3); font-size: var(--step--1); }
+.board-masthead__stats { display: flex; gap: var(--space-xs); padding: 0; }
+.board-masthead__readout {
+  position: relative;
+  flex-direction: column-reverse;
+  min-width: 6.5rem;
+  gap: var(--space-2xs);
+  padding: var(--space-s) var(--space-m);
+  background: var(--surface);
+  border: var(--border);
+  border-radius: var(--radius);
+  box-shadow: var(--card-shadow);
+}
+.board-masthead__value { margin: 0; font-family: var(--font-display); font-size: var(--step-4); font-weight: 400; }
+.board-masthead__label { white-space: nowrap; }
+.board-masthead__readout--live .board-masthead__label::before {
+  content: "";
+  display: inline-block;
+  width: 7px; height: 7px;
+  margin-inline-end: var(--space-2xs);
+  border-radius: 50%;
+  background: var(--accent);
+  animation: livepulse 1.8s var(--ease) infinite;
+}
+@keyframes livepulse { 0%,100% { opacity: 1; } 50% { opacity: .25; } }
+
+.board-group { margin-top: var(--space-s); }
+.board-group__title { display: flex; align-items: center; gap: var(--space-xs); margin-bottom: var(--space-xs); }
+.board-group__count {
+  padding: 0 var(--space-xs);
+  border-radius: var(--radius);
+  background: var(--surface-2);
+  color: var(--ink-2);
+  font-size: var(--step--2);
+}
+.board-rows { display: grid; gap: var(--space-xs); }
+
+/* Flight card */
+.flightcard {
+  --card-accent: var(--st-sched);
+  display: grid;
+  grid-template-columns: 11rem minmax(0, 1fr) auto;
+  grid-template-areas: "id route status";
+  align-items: center;
+  gap: var(--space-l);
+  padding: var(--space-m) var(--space-l) var(--space-m) calc(var(--space-l) - 3px);
+  border: var(--border);
+  border-left: 3px solid var(--card-accent);
+  border-radius: var(--radius);
+  background: var(--surface);
+  box-shadow: var(--card-shadow);
+  color: var(--ink);
+  text-decoration: none;
+  transition: transform var(--dur-fast) var(--ease), border-color var(--dur-fast) var(--ease), box-shadow var(--dur) var(--ease);
+}
+.flightcard:hover { transform: translateY(-1px); border-color: var(--line-strong); border-left-color: var(--card-accent); box-shadow: var(--shadow-far); }
+.flightcard[data-status="boarding"] { --card-accent: var(--st-board); }
+.flightcard[data-status="enroute"]  { --card-accent: var(--st-enrt); }
+.flightcard[data-status="arrived"]  { --card-accent: var(--st-done); }
+.flightcard[data-status="cancelled"]{ --card-accent: var(--st-cancel); }
+.flightcard[data-status="diverted"] { --card-accent: var(--st-divert); }
+
+.flightcard__id { grid-area: id; display: flex; align-items: center; gap: var(--space-s); min-width: 0; }
+.flightcard__idtext { display: grid; gap: var(--space-3xs); min-width: 0; }
+.flightcard__code { font-family: var(--font-mono); font-weight: 600; font-size: var(--step-1); line-height: 1.1; white-space: nowrap; }
+.flightcard__note { color: var(--ink-3); font-size: var(--step--1); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+
+.flightcard__route { grid-area: route; display: grid; grid-template-columns: auto minmax(3rem, 1fr) auto; align-items: start; gap: var(--space-m); }
+.flightcard__end { display: grid; gap: var(--space-3xs); min-width: 4.5rem; }
+.flightcard__end--arr { text-align: right; }
+.flightcard__iata { font-family: var(--font-mono); font-weight: 600; font-size: var(--step-2); line-height: 1; letter-spacing: 0.02em; }
+.flightcard__city { color: var(--ink-3); font-size: var(--step--1); line-height: 1.2; }
+.flightcard__time { margin-top: var(--space-2xs); font-family: var(--font-mono); font-size: var(--step-0); font-variant-numeric: tabular-nums; }
+.flightcard__day { color: var(--ink-3); font-size: var(--step--2); letter-spacing: 0.06em; text-transform: uppercase; }
+
+.flightcard__track { display: grid; justify-items: center; gap: var(--space-2xs); padding-top: var(--space-2xs); }
+.flightcard__dur { order: -1; color: var(--ink-3); font-family: var(--font-mono); font-size: var(--step--2); }
+.flightcard__line { position: relative; display: block; width: 100%; height: 2px; margin-top: var(--space-2xs); background: repeating-linear-gradient(90deg, var(--line-strong) 0 6px, transparent 6px 11px); }
+.flightcard__progress { position: absolute; inset-block: 0; inset-inline-start: 0; display: block; background: var(--card-accent); }
+.flightcard__line::before,
+.flightcard__line::after { content: ""; position: absolute; top: 50%; width: 8px; height: 8px; margin-top: -4px; border-radius: 50%; background: var(--surface); border: 2px solid var(--line-strong); }
+.flightcard__line::before { inset-inline-start: -2px; }
+.flightcard__line::after  { inset-inline-end: -2px; }
+.flightcard[data-status="enroute"] .flightcard__line::before,
+.flightcard[data-status="arrived"] .flightcard__line::before,
+.flightcard[data-status="arrived"] .flightcard__line::after { border-color: var(--card-accent); background: var(--card-accent); }
+.flightcard__plane {
+  position: absolute; top: 50%;
+  width: 12px; height: 12px;
+  margin: -6px 0 0 -6px;
+  border-radius: 50%;
+  background: var(--card-accent);
+  box-shadow: 0 0 0 4px color-mix(in srgb, var(--card-accent) 22%, transparent), 0 0 12px var(--glow-route);
+}
+
+.flightcard__status { grid-area: status; display: grid; justify-items: end; gap: var(--space-xs); text-align: right; }
+
+.flightcard--skeleton { min-height: 108px; border-left-color: var(--line); background: linear-gradient(100deg, var(--surface) 30%, var(--surface-2) 50%, var(--surface) 70%) 0 0 / 200% 100%; animation: shimmer 1.4s linear infinite; }
+@keyframes shimmer { to { background-position: -200% 0; } }
+
+.statusbadge {
+  padding: var(--space-2xs) var(--space-s);
+  background: color-mix(in srgb, currentColor 11%, transparent);
+  border-color: color-mix(in srgb, currentColor 28%, transparent) !important;
+}
+
+/* ===== Stat tiles ===== */
+
+.statstrip { display: grid; grid-template-columns: repeat(auto-fit, minmax(9.5rem, 1fr)); gap: var(--space-xs); }
+.stattile {
+  display: grid;
+  gap: var(--space-2xs);
+  min-width: 0;
+  padding: var(--space-m);
+  border: var(--border);
+  border-radius: var(--radius);
+  background: var(--surface);
+  box-shadow: var(--card-shadow);
+}
+.stattile__value { font-family: var(--font-display); font-size: var(--step-3); line-height: 1.05; white-space: nowrap; font-variant-numeric: lining-nums tabular-nums; }
+.stattile__label { color: var(--ink-3); font-size: var(--step--2); letter-spacing: 0.08em; text-transform: uppercase; }
+
+/* ===== Logbook table ===== */
+
+.logtable-wrap { border-radius: var(--radius); box-shadow: var(--card-shadow); }
+table.logtable { font-size: var(--step--1); }
+table.logtable th { background: var(--surface-2); border-bottom: var(--border); white-space: nowrap; }
+table.logtable td { padding: var(--space-s) var(--space-s); vertical-align: middle; }
+table.logtable tbody tr:last-child td { border-bottom: 0; }
+table.logtable th:first-child, table.logtable td:first-child { padding-inline-start: var(--space-m); }
+table.logtable th:last-child, table.logtable td:last-child { padding-inline-end: var(--space-m); }
+.logtable__flight { white-space: nowrap; }
+.logtable__code { font-family: var(--font-mono); font-weight: 600; color: var(--accent-ink); text-decoration: none; }
+.logtable__code:hover { text-decoration: underline; }
+.logtable__flight .relation-chip { margin-inline-start: var(--space-xs); }
+.logtable__arrow { color: var(--ink-3); }
+.logtable__times { color: var(--ink-2); white-space: nowrap; }
+.logtable__aircraft { font-family: var(--font-mono); }
+.logtable__type { margin-inline-start: var(--space-xs); color: var(--ink-3); font-family: var(--font-mono); font-size: var(--step--2); }
+.logtable__note { max-width: 18rem; color: var(--ink-2); }
+.logtable__actions { text-align: right; white-space: nowrap; }
+.tag { display: inline-block; padding: 0 var(--space-xs); border: var(--border); border-radius: var(--radius); background: var(--surface-2); color: var(--ink-2); font-family: var(--font-mono); font-size: var(--step--2); text-transform: capitalize; }
+.stars { color: var(--accent); letter-spacing: 1px; white-space: nowrap; }
+.stars__off { color: var(--line-strong); }
+
+/* ===== Stats ===== */
+
+.barchart__row { grid-template-columns: 3.5rem 1fr 7rem; padding: var(--space-xs) 0; }
+.barchart__label { color: var(--ink-2); }
+.barchart__track { display: block; height: 10px; border-radius: var(--radius); background: var(--surface-2); overflow: hidden; }
+.barchart__bar { display: block; height: 100%; opacity: 1; background: var(--accent); border-radius: var(--radius); }
+.barchart__value { text-align: right; font-variant-numeric: tabular-nums; }
+.route-ranking li { padding: var(--space-s) 0; }
+
+/* ===== Flight dossier ===== */
+
+.hero { display: grid; gap: var(--space-s); }
+.hero__meta { display: flex; flex-wrap: wrap; align-items: center; gap: var(--space-xs); }
+.hero__airline { color: var(--ink-2); font-size: var(--step--1); font-weight: 600; margin-inline-end: var(--space-xs); }
+.hero__code { margin: 0; font-size: var(--step-3); color: var(--ink-2); }
+.hero__route { display: grid; grid-template-columns: auto minmax(5rem, 14rem) auto; align-items: center; justify-content: start; gap: var(--space-l); }
+.hero__end { display: grid; gap: var(--space-2xs); }
+.hero__iata { font-family: var(--font-mono); font-weight: 600; font-size: var(--step-6); line-height: .95; letter-spacing: -0.01em; }
+.hero__city { color: var(--ink-2); font-size: var(--step-0); }
+.hero__arrow { position: relative; display: grid; justify-items: center; gap: var(--space-2xs); color: var(--accent); align-self: start; padding-top: var(--space-m); }
+.hero__arrow svg { width: 100%; height: 12px; }
+.hero__distance { color: var(--ink-3); font-family: var(--font-mono); font-size: var(--step--1); }
+.hero__sub { color: var(--ink-3); font-size: var(--step--1); }
+
+.dossier { gap: var(--space-xl); }
+.dossier__info { display: grid; gap: var(--space-m); min-width: 0; }
+.dossier__map { display: grid; gap: var(--space-s); }
+
+.readout-row { align-items: flex-start; padding: var(--space-xs) 0; border-bottom: 1px dashed var(--line); }
+.readout-row:last-child { border-bottom: 0; }
+.readout-row__label { padding-top: 3px; letter-spacing: 0.06em; }
+.readout-row__value { text-align: right; background: none; border: 0; padding: 0; display: grid; justify-items: end; gap: var(--space-3xs); font-size: var(--step-0); }
+.readout-row__meta { display: block; margin: 0; }
+
+.track {
+  border: 0;
+  border-radius: var(--radius) var(--radius) 0 0;
+  background-color: var(--surface);
+  background-image: radial-gradient(var(--line) 1px, transparent 1.2px);
+  background-size: 18px 18px;
+}
+.track__plan { stroke-dasharray: 3 7; stroke-linecap: round; }
+.track__flow, .track__plane { filter: drop-shadow(0 0 6px var(--glow-route)); }
+.track__airport { font-weight: 600; fill: var(--ink); }
+figure.data-panel { gap: 0; overflow: hidden; }
+figure.data-panel figcaption { border-top: var(--border); }
+
+.alertbanner { border-radius: var(--radius); box-shadow: var(--card-shadow); }
+
+/* ===== Auth ===== */
+
+.authlayout { background: radial-gradient(60rem 30rem at 50% -10%, var(--accent-soft), transparent 70%), var(--bg); }
+.authcard { box-shadow: var(--shadow-far); }
+
+/* ===== Responsive ===== */
+
+@media (max-width: 1023.98px) {
+  .flightcard { grid-template-columns: 9.5rem minmax(0, 1fr) auto; gap: var(--space-m); }
+}
+
+@media (max-width: 767.98px) {
+  .main { padding: var(--space-m) var(--space-m) calc(var(--space-4xl) + env(safe-area-inset-bottom)); }
+  .page { gap: var(--space-m); }
+  h1 { font-size: var(--step-3); }
+
+  .board-masthead__title { font-size: var(--step-4); }
+  .board-masthead__stats { width: 100%; }
+  .board-masthead__readout { flex: 1; min-width: 0; padding: var(--space-xs) var(--space-s); }
+  .board-masthead__value { font-size: var(--step-3); }
+
+  .flightcard {
+    grid-template-columns: 1fr auto;
+    grid-template-areas: "id status" "route route";
+    gap: var(--space-s) var(--space-m);
+    padding: var(--space-m);
+    padding-left: calc(var(--space-m) - 3px);
+  }
+  .flightcard__status { justify-items: end; }
+  .flightcard__iata { font-size: var(--step-1); }
+  .flightcard__route { gap: var(--space-s); padding-top: var(--space-xs); border-top: 1px dashed var(--line); }
+
+  .hero__iata { font-size: var(--step-5); }
+  .hero__route { grid-template-columns: auto minmax(2.5rem, 1fr) auto; gap: var(--space-m); width: 100%; }
+
+  .pagehead__actions { width: 100%; }
+  .pagehead__actions .btn { order: -1; flex: 1 1 100%; }
+  .pagehead__actions .btn-outline { flex: 1; }
+
+  .statstrip {
+    grid-auto-flow: column;
+    grid-template-columns: none;
+    grid-auto-columns: minmax(8.5rem, 42%);
+    overflow-x: auto;
+    scroll-snap-type: x proximity;
+    scrollbar-width: none;
+    margin-inline: calc(-1 * var(--space-m));
+    padding-inline: var(--space-m);
+  }
+  .statstrip::-webkit-scrollbar { display: none; }
+  .stattile { scroll-snap-align: start; padding: var(--space-s) var(--space-m); }
+  .stattile__value { font-size: var(--step-2); }
+  .toolbar { gap: var(--space-xs); }
+  .select--compact { flex: 1; }
+
+  /* Logbook table becomes a stack of cards */
+  .logtable-wrap { border: 0; background: none; box-shadow: none; overflow: visible; }
+  table.logtable, table.logtable tbody { display: block; }
+  table.logtable thead { position: absolute; width: 1px; height: 1px; overflow: hidden; clip-path: inset(50%); }
+  table.logtable tbody { display: grid; gap: var(--space-xs); }
+  table.logtable tr {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: var(--space-2xs) var(--space-m);
+    padding: var(--space-m);
+    border: var(--border);
+    border-radius: var(--radius);
+    background: var(--surface);
+    box-shadow: var(--card-shadow);
+  }
+  table.logtable td { display: grid; gap: var(--space-3xs); padding: 0 !important; border: 0; }
+  table.logtable td[data-label]::before { content: attr(data-label); color: var(--ink-3); font-size: var(--step--2); letter-spacing: 0.08em; text-transform: uppercase; }
+  table.logtable td.logtable__note { grid-column: 1 / -1; max-width: none; }
+  table.logtable td.logtable__note:empty { display: none; }
+  table.logtable td.logtable__actions { grid-column: 1 / -1; text-align: right; }
+  table.logtable td:first-child { grid-column: 1 / -1; }
+}

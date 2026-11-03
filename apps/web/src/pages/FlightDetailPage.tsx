@@ -102,23 +102,30 @@ export function FlightDetailPage() {
 
   return (
     <article className="page">
-      <header className="page" style={{ gap: 'var(--space-2xs)' }}>
-        <div style={{ display: 'flex', gap: 'var(--space-s)', alignItems: 'center', flexWrap: 'wrap' }}>
+      <header className="hero">
+        <div className="hero__meta">
           <span className="airline-mark">{f.airline?.iata ?? 'SEL'}</span>
-          <h1 className="board-flightcode" style={{ fontSize: 'var(--step-2)', margin: 0 }}>
-            {f.flightCode}
-          </h1>
-          <span className="board-route">
-            {f.departure.iata} → {f.arrival.iata}
-          </span>
+          <span className="hero__airline">{f.airline?.name ?? 'Self-entered flight'}</span>
           <StatusBadge status={f.status} />
           <ConditionChip condition={condition} timestamp={positions.data?.fetchedAt ?? null} />
           {relation.data?.loggedState === 'planned' && <span className="relation-chip">Planned</span>}
         </div>
-        <p className="page__meta">
-          {f.airline?.name ?? 'Self-entered flight'} · {f.departure.name} ({f.departure.city}) to {f.arrival.name} ({f.arrival.city})
-          {f.distanceKm !== null ? ` · ${formatDistance(f.distanceKm)}` : ''}
-        </p>
+        <h1 className="hero__code">{f.flightCode}</h1>
+        <div className="hero__route">
+          <div className="hero__end">
+            <span className="hero__iata">{f.departure.iata}</span>
+            <span className="hero__city">{f.departure.city}</span>
+          </div>
+          <span className="hero__arrow" aria-hidden="true">
+            <svg viewBox="0 0 120 12" preserveAspectRatio="none"><path d="M0 6h112M106 1l8 5-8 5" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" /></svg>
+            {f.distanceKm !== null && <span className="hero__distance">{formatDistance(f.distanceKm)}</span>}
+          </span>
+          <div className="hero__end hero__end--arr">
+            <span className="hero__iata">{f.arrival.iata}</span>
+            <span className="hero__city">{f.arrival.city}</span>
+          </div>
+        </div>
+        <p className="hero__sub">{f.departure.name} to {f.arrival.name}</p>
       </header>
 
       <div className="dossier">
