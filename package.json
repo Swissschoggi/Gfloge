@@ -1,0 +1,28 @@
+{
+  "name": "gfloge",
+  "private": true,
+  "version": "0.1.0",
+  "description": "Gfloge \u2014 self-hosted personal flight tracking with a logbook at its heart",
+  "license": "GPL-3.0",
+  "workspaces": [
+    "apps/*",
+    "packages/*"
+  ],
+  "scripts": {
+    "dev": "npm run dev --workspace @gfloge/web",
+    "dev:api": "npm run dev --workspace @gfloge/api",
+    "dev:worker": "npm run start --workspace @gfloge/worker",
+    "build": "npm run build --workspace @gfloge/web",
+    "typecheck": "npm run typecheck --workspace @gfloge/web && npx tsc -p apps/api/tsconfig.json --noEmit && npx tsc -p apps/worker/tsconfig.json --noEmit",
+    "lint": "npm run lint --workspace @gfloge/web && npm run lint --workspace @gfloge/api",
+    "test": "npm test --workspace @gfloge/api",
+    "migrate": "node --import tsx packages/db/migrate-cli.ts",
+    "db-generate": "drizzle-kit generate --config packages/db/drizzle.config.ts"
+  },
+  "devDependencies": {
+    "@types/node": "^22.20.5",
+    "@types/pg": "^8.23.1",
+    "drizzle-kit": "^0.30.6",
+    "drizzle-orm": "^0.45.4"
+  }
+}

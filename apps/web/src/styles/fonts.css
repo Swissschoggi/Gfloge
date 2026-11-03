@@ -1,0 +1,31 @@
+/* Metric-matched fallback faces (per DESIGN_SYSTEM typography rules):
+   keep the fallback stack's metrics close to the real faces so
+   font-display: swap causes no measurable layout shift.
+   Fallback family names are referenced from the token font stacks. */
+
+@font-face {
+  font-family: "Instrument Serif Fallback";
+  src: local("Georgia"), local("Times New Roman");
+  size-adjust: 101%;
+  ascent-override: 96%;
+  descent-override: 27%;
+  line-gap-override: 0%;
+}
+
+@font-face {
+  font-family: "Instrument Sans Fallback";
+  src: local("Helvetica Neue"), local("Arial"), local("Segoe UI");
+  size-adjust: 99%;
+  ascent-override: 97%;
+  descent-override: 25%;
+  line-gap-override: 0%;
+}
+
+@font-face {
+  font-family: "Plex Mono Fallback";
+  src: local("DejaVu Sans Mono"), local("Menlo"), local("Consolas");
+  size-adjust: 97%;
+  ascent-override: 100%;
+  descent-override: 27%;
+  line-gap-override: 0%;
+}

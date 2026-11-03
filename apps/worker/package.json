@@ -1,0 +1,16 @@
+{
+  "name": "@gfloge/worker",
+  "version": "0.1.0",
+  "private": true,
+  "license": "GPL-3.0",
+  "type": "module",
+  "scripts": {
+    "dev": "tsx watch src/index.ts",
+    "start": "tsx src/index.ts"
+  },
+  "dependencies": {
+    "@gfloge/db": "0.1.0",
+    "@gfloge/shared": "0.1.0",
+    "tsx": "^4.19.2"
+  }
+}

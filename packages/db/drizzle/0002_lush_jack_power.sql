@@ -1,0 +1,1 @@
+ALTER TABLE "provider_state" ADD COLUMN "enabled" boolean DEFAULT true NOT NULL;

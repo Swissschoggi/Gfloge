@@ -1,0 +1,9 @@
+AGENTS.md
+node_modules/
+dist/
+*.local
+.DS_Store
+docs/
+AGENTS.md
+# React Component Preview
+previewConfig.json

@@ -1,0 +1,9 @@
+{
+  "name": "@gfloge/design",
+  "version": "0.1.0",
+  "description": "Gfloge design tokens — canonical values from docs/design/DESIGN_SYSTEM.md",
+  "license": "GPL-3.0",
+  "exports": {
+    "./tokens.css": "./tokens.css"
+  }
+}

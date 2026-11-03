@@ -1,0 +1,192 @@
+/*
+ * Gfloge, canonical design tokens.
+ * Source of truth: docs/design/DESIGN_SYSTEM.md §1 (Phase 1).
+ *
+ * Role notes: --font-display (Instrument Serif) is reserved for the brand
+ * wordmark and personal/archival surfaces; --font-text (Instrument Sans)
+ * carries the interface; --font-mono voices technical data.
+ *
+ * Deviations from the doc block (both spec-motivated, value-neutral):
+ *  1. Font stacks additionally name metric-matched "...Fallback" families, as
+ *     required by the typography loading rules (font-display: swap + no layout
+ *     shift). The actual faces are unchanged.
+ *  2. `color-scheme` declarations added so native form controls/scrollbars
+ *     follow the active theme.
+ * Every other value is verbatim from the design system.
+ */
+
+:root {
+  /* ===== TYPE ===== */
+  --font-display: "Instrument Serif", "Instrument Serif Fallback", Georgia, "Times New Roman", serif;
+  --font-text: "Instrument Sans Variable", "Instrument Sans", "Instrument Sans Fallback", "Helvetica Neue", ui-sans-serif, sans-serif;
+  --font-mono: "IBM Plex Mono", "Plex Mono Fallback", ui-monospace, "SFMono-Regular", monospace;
+
+  --step--2: clamp(0.6667rem, 0.64rem + 0.13vw, 0.7rem);
+  --step--1: clamp(0.8rem, 0.77rem + 0.16vw, 0.84rem);
+  --step-0:  clamp(1rem, 0.96rem + 0.2vw, 1.05rem);
+  --step-1:  clamp(1.25rem, 1.2rem + 0.25vw, 1.3125rem);
+  --step-2:  clamp(1.563rem, 1.5rem + 0.31vw, 1.64rem);
+  --step-3:  clamp(1.953rem, 1.87rem + 0.39vw, 2.05rem);
+  --step-4:  clamp(2.441rem, 2.34rem + 0.49vw, 2.5625rem);
+  --step-5:  clamp(3.052rem, 2.92rem + 0.62vw, 3.2rem);
+  --step-6:  clamp(3.815rem, 3.65rem + 0.77vw, 4rem);
+
+  /* ===== SPACE (base 4px, plus a 2px micro token; no in-between values) ===== */
+  --space-3xs: 0.125rem;  /* 2 — micro token: icon alignment, split-flap ticks, hairline insets ONLY */
+  --space-2xs: 0.25rem;   /* 4  */
+  --space-xs:  0.5rem;    /* 8  */
+  --space-s:   0.75rem;   /* 12 */
+  --space-m:   1rem;      /* 16 */
+  --space-l:   1.5rem;    /* 24 */
+  --space-xl:  2rem;      /* 32 */
+  --space-2xl: 3rem;      /* 48 */
+  --space-3xl: 4rem;      /* 64 */
+  --space-4xl: 6rem;      /* 96 */
+
+  /* ===== LAYOUT ===== */
+  --sidebar-w: 15rem;          /* 240px — full sidebar (≥1024px) */
+  --sidebar-w-rail: 3.5rem;    /* 56px icon rail */
+  --content-max: 68rem;        /* 1088px text columns; maps/table can exceed */
+  --measure: 68ch;
+
+  /* ===== COLOR — BROAD DAYLIGHT (light, default) ===== */
+  --bg:           #f4f2ec;
+  --surface:      #fcfbf8;
+  --surface-2:    #ebe7de;
+  --ink:          #171c24;
+  --ink-2:        #4d5561;
+  --ink-3:        #5f6774;
+  --line:         #dcd8cc;
+  --line-strong:  #b9b4a6;
+  --accent:       #e0512a;   /* fills, large elements only */
+  --accent-ink:   #b23a12;   /* accent as text/links (AA on bg) */
+  --accent-soft:  rgba(224, 81, 42, .12);
+  --focus:        #1f5f8b;
+  --danger:       #a82418;   /* destructive actions only */
+
+  /* Filled-control foreground on accent fill (DESIGN_SYSTEM §4 contract;
+     measured: #12161d on #e0512a = 4.64:1, night near-black = 5.73:1). */
+  --on-accent:    #12161d;
+
+  /* Status text variants: the foreground used by status chips/badges.
+     Amber and divert (and night cancel) are darkened/lightened to clear
+     4.5:1 against their 12% tint — same hue, adjusted lightness. */
+  --st-sched-ink:  #5b6370;
+  --st-board-ink:  #8c5815;
+  --st-enrt-ink:   #1f5f8b;
+  --st-done-ink:   #2c6e49;
+  --st-cancel-ink: #a82418;
+  --st-divert-ink: #96520f;
+
+  /* ===== FLIGHT STATUS COLORS (operational status dimension) ===== */
+  --st-sched:   #5f6774;
+  --st-board:   #c07a1f;
+  --st-enrt:    #1f5f8b;
+  --st-done:    #2c6e49;
+  --st-cancel:  #a82418;
+  --st-divert:  #b16112;
+  /* each pairs with pictogram + label; never color alone */
+
+  /* ===== NIGHT OPS (dark) ===== */
+  --night-bg:           #0d1117;
+  --night-surface:      #151b24;
+  --night-surface-2:    #1c222d;
+  --night-ink:          #e7e9ec;
+  --night-ink-2:        #a8aeb8;
+  --night-ink-3:        #8b929c;
+  --night-line:         #262d38;
+  --night-line-strong:  #3a4250;
+  --night-accent:       #ef5f33;
+  --night-accent-ink:   #f0784f;
+  --night-accent-soft:  rgba(239, 95, 51, .16);
+  --night-focus:        #5da9d8;
+  --night-danger:       #e2604d;
+  /* near-black foreground for accent fills in night (measured 5.73:1) and
+     status text variants (same rule as day; night cancel lightened) */
+  --night-on-accent:    var(--night-bg);
+  --night-st-sched-ink:  #9aa1ab;
+  --night-st-board-ink:  #f2a63c;
+  --night-st-enrt-ink:   #5da9d8;
+  --night-st-done-ink:   #69c07d;
+  --night-st-cancel-ink: #e87260;
+  --night-st-divert-ink: #e08a2e;
+
+  /* NIGHT OPS: flight status tokens (operational status dimension, complete) */
+  --night-st-sched:  #9aa1ab;
+  --night-st-board:  #f2a63c;
+  --night-st-enrt:   #5da9d8;
+  --night-st-done:   #69c07d;
+  --night-st-cancel: #e2604d;
+  --night-st-divert: #e08a2e;
+
+  /* ===== MAP (style JSON in repo; tokens here for UI-adjacent use) ===== */
+  --map-day-land:   #f0ede2;
+  --map-day-water:  #c9d5d2;
+  --map-day-urban:  #e3ded1;
+  --map-day-label:  #4d5561;
+  --map-night-land: #10151d;
+  --map-night-water:#0b0f16;
+  --map-night-urban:#151b22;
+  --map-night-label:#8b929c;
+  --glow-route:     rgba(242, 166, 60, .35); /* the ONLY glow permitted */
+
+  /* ===== FORM ===== */
+  --radius: 4px;             /* the one radius. no pills, no mixed radii */
+  --border: 1px solid var(--line);
+  --border-strong: 1px solid var(--line-strong);
+
+  /* ===== ELEVATION (only on floating layers) ===== */
+  --shadow-near: 0 1px 2px rgb(23 28 36 / .08);
+  --shadow-far:  0 12px 32px rgb(23 28 36 / .12);
+  --night-shadow-near: 0 1px 2px rgb(0 0 0 / .5);
+  --night-shadow-far:  0 12px 32px rgb(0 0 0 / .55);
+
+  /* ===== MOTION ===== */
+  --dur-fast: 120ms;  --dur: 220ms;  --dur-slow: 380ms;
+  --ease:     cubic-bezier(0.2, 0, 0, 1);
+  --ease-out: cubic-bezier(0.16, 1, 0.3, 1);
+
+  /* ===== Z-INDEX LADDER (documented, never ad hoc) ===== */
+  --z-map-underlay: 0;
+  --z-content:      10;
+  --z-sidebar:      20;
+  --z-topbar-sticky:30;
+  --z-popover:      40;
+  --z-modal:        50;
+  --z-toast:        60;
+  --z-skip-link:    100;
+
+  color-scheme: light;
+}
+
+/* ===== NIGHT OPS (dark theme override) ===== */
+[data-theme="night"] {
+  --bg: var(--night-bg);          --surface: var(--night-surface);
+  --surface-2: var(--night-surface-2);
+  --ink: var(--night-ink);        --ink-2: var(--night-ink-2);
+  --ink-3: var(--night-ink-3);
+  --line: var(--night-line);      --line-strong: var(--night-line-strong);
+  --accent: var(--night-accent);  --accent-ink: var(--night-accent-ink);
+  --accent-soft: var(--night-accent-soft);
+  --on-accent: var(--night-on-accent);
+  --focus: var(--night-focus);    --danger: var(--night-danger);
+  --st-sched: var(--night-st-sched);   --st-board: var(--night-st-board);
+  --st-enrt: var(--night-st-enrt);     --st-done: var(--night-st-done);
+  --st-cancel: var(--night-st-cancel); --st-divert: var(--night-st-divert);
+  --st-sched-ink: var(--night-st-sched-ink);   --st-board-ink: var(--night-st-board-ink);
+  --st-enrt-ink: var(--night-st-enrt-ink);     --st-done-ink: var(--night-st-done-ink);
+  --st-cancel-ink: var(--night-st-cancel-ink); --st-divert-ink: var(--night-st-divert-ink);
+  --shadow-near: var(--night-shadow-near);
+  --shadow-far:  var(--night-shadow-far);
+
+  color-scheme: dark;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *, *::before, *::after {
+    animation-duration: .01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: .01ms !important;
+    scroll-behavior: auto !important;
+  }
+}
