@@ -138,15 +138,15 @@
   --shadow-far: var(--shadow-float);
   --card-shadow: var(--shadow-card);
 
-  /* ===== MAP — always the "glowing screen" (midnight violet in both themes) ===== */
-  --map-ocean:   #0d0021;
-  --map-land:    #1c1046;
-  --map-border:  #35286f;
-  --map-grid:    #1a0f45;
-  --map-route:   #8f86d6;
-  --map-label:   #b9b2e8;
-  --map-selected-route: #ffffff;
-  --glow-route:  rgba(150, 130, 255, 0.55);
+  /* ===== MAP — theme-aware (light geography in light mode, midnight violet at night) ===== */
+  --map-ocean:   #dbeafe;
+  --map-land:    #f1f5f9;
+  --map-border:  #cbd5e1;
+  --map-grid:    #e2e8f0;
+  --map-route:   #2563eb;
+  --map-label:   #334155;
+  --map-selected-route: #1e40af;
+  --glow-route:  rgba(37, 99, 235, 0.35);
 
   --map-day-land: var(--map-land);   --map-night-land: var(--map-land);
   --map-day-water: var(--map-ocean); --map-night-water: var(--map-ocean);
@@ -181,6 +181,15 @@
   --focus:       #6db1ff;
   --danger:      #ff6b5e;
   --nav-bg:      rgba(5, 1, 13, 0.78);
+
+  --map-ocean:   #0d0021;
+  --map-land:    #1c1046;
+  --map-border:  #35286f;
+  --map-grid:    #1a0f45;
+  --map-route:   #8f86d6;
+  --map-label:   #b9b2e8;
+  --map-selected-route: #ffffff;
+  --glow-route:  rgba(150, 130, 255, 0.55);
 
   --st-sched:   #a29fb2;
   --st-board:   #ffa04d;

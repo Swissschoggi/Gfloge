@@ -63,6 +63,9 @@ export const PUBLIC_PATHS = new Set<string>([
 /** Routes that require a session enforce it in the app-level onRequest hook. */
 export function isProtectedPath(path: string): boolean {
   if (path.startsWith('/api/v1/setup/')) return false
+  if (path.startsWith('/api/v1/share/')) return false
+  if (path.startsWith('/api/v1/calendar/')) return false
+  if (path === '/api/v1/push/vapid-public-key') return false
   return path.startsWith('/api/') && !PUBLIC_PATHS.has(path)
 }
 

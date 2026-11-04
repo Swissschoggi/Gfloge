@@ -8,6 +8,8 @@ import { ProviderSettings } from '../components/ProviderSettings'
 
 const TABS = [
   { key: 'profile', label: 'Profile' },
+  { key: 'notifications', label: 'Notifications' },
+  { key: 'calendar', label: 'Calendar' },
   { key: 'trips', label: 'Trips' },
   { key: 'users', label: 'Users' },
   { key: 'providers', label: 'Data sources' },
@@ -22,7 +24,7 @@ export function SettingsPage() {
   const requested = params.get('tab') ?? 'profile'
   const me = useMe()
   const isAdmin = me.data?.me?.role === 'admin'
-  const visible = TABS.filter((tab) => ['profile', 'trips', 'historical', 'reference'].includes(tab.key) || isAdmin)
+  const visible = TABS.filter((tab) => ['profile', 'calendar', 'notifications', 'trips', 'historical', 'reference'].includes(tab.key) || isAdmin)
   const active = visible.some((tab) => tab.key === requested) ? requested : 'profile'
   return (
     <div className="page settings-page">
@@ -38,6 +40,8 @@ export function SettingsPage() {
       <section className="settings-content" aria-labelledby="settings-section-title">
         <header><h2 id="settings-section-title">{TABS.find((tab) => tab.key === active)?.label ?? 'Settings section'}</h2></header>
       {active === 'profile' && <ProfileSettings />}
+      {active === 'calendar' && <CalendarSettings />}
+      {active === 'notifications' && <NotificationSettings />}
       {active === 'trips' && <div className="data-panel"><h2 className="data-panel__title">Trips</h2><p>Your itineraries are stored separately from your logbook flights.</p><Link className="btn" to="/trips">Open trips</Link></div>}
       {active === 'users' && isAdmin && <UserSettings />}
       {active === 'providers' && isAdmin && <ProviderSettings />}
@@ -90,6 +94,98 @@ function ProfileSettings() {
     <form className="data-panel" onSubmit={(e)=>void changePassword(e)}><h2 className="data-panel__title">Change password</h2><div className="field"><label htmlFor="cur-pw">Current password</label><input id="cur-pw" className="input" type="password" autoComplete="current-password" value={currentPassword} onChange={e=>setCurrentPassword(e.target.value)} required/></div><div className="field"><label htmlFor="new-pw">New password</label><input id="new-pw" className="input" type="password" autoComplete="new-password" minLength={10} value={newPassword} onChange={e=>setNewPassword(e.target.value)} required/><p className="hint">At least 10 characters.</p></div><button className="btn-outline" type="submit" disabled={password.isPending}>Change password</button></form>
     <DeleteAccount onDelete={(pw)=>deleteAccount.mutate(pw)} pending={deleteAccount.isPending}/>
   </div>
+}
+
+
+function CalendarSettings() {
+  const [token, setToken] = useState<string | null>(null)
+  const [message, setMessage] = useState<string | null>(null)
+  const [error, setError] = useState<string | null>(null)
+  const generate = useMutation({
+    mutationFn: () => api.post<{ token: string; url: string }>('/api/v1/calendar/feed'),
+    onSuccess: (data) => { setToken(data.token); setMessage('Calendar feed created. Copy the URL now; it will not be shown again.'); setError(null) },
+    onError: (e) => setError((e as Error).message),
+  })
+  const revoke = useMutation({
+    mutationFn: () => api.delete('/api/v1/calendar/feed'),
+    onSuccess: () => { setToken(null); setMessage('Calendar feed revoked.'); setError(null) },
+    onError: (e) => setError((e as Error).message),
+  })
+  async function copy() {
+    if (!token) return
+    try { await navigator.clipboard.writeText(`${window.location.origin}/api/v1/calendar/${token}.ics`); setMessage('Copied to clipboard.') }
+    catch { setError('Could not copy. Copy manually.') }
+  }
+  return (
+    <div className="data-panel">
+      <h2 className="data-panel__title">Calendar subscription</h2>
+      <p className="form-note">Generate a private, subscribable .ics feed for upcoming flights. Anyone with the URL can access it. It exposes flight numbers, airports, times, status and trip names, but not booking references, seats or private notes.</p>
+      <div className="actions-row">
+        <button className="btn" type="button" disabled={generate.isPending} onClick={() => generate.mutate()}>
+          {generate.isPending ? 'Generating…' : token ? 'Regenerate URL' : 'Generate URL'}
+        </button>
+        {token && <button className="btn-outline" type="button" onClick={() => void copy()}>Copy URL</button>}
+        {token && <button className="btn-danger" type="button" disabled={revoke.isPending} onClick={() => revoke.mutate()}>Revoke</button>}
+      </div>
+      {token && <p className="form-note" role="status">Feed URL: {window.location.origin}/api/v1/calendar/{token}.ics</p>}
+      {message && <p role="status" className="form-note">{message}</p>}
+      {error && <p role="alert" className="form-error">{error}</p>}
+    </div>
+  )
+}
+
+
+function NotificationSettings() {
+  const [supported] = useState(() => 'serviceWorker' in navigator && 'PushManager' in window)
+  const [permission, setPermission] = useState(() => (supported ? Notification.permission : 'unsupported'))
+  const [message, setMessage] = useState<string | null>(null)
+  const [error, setError] = useState<string | null>(null)
+  const vapid = useQuery({ queryKey: ['vapid'], queryFn: () => api.get<{ publicKey: string }>('/api/v1/push/vapid-public-key'), enabled: supported })
+  async function enable() {
+    setError(null); setMessage(null)
+    if (!supported) { setError('Push notifications are not supported in this browser.'); return }
+    try {
+      const perm = await Notification.requestPermission()
+      setPermission(perm)
+      if (perm !== 'granted') { setError('Permission was not granted.'); return }
+      const reg = await navigator.serviceWorker.ready
+      const sub = await reg.pushManager.subscribe({ userVisibleOnly: true, applicationServerKey: vapid.data!.publicKey })
+      const json = sub.toJSON()
+      await api.post('/api/v1/push/subscriptions', { endpoint: json.endpoint, keys: json.keys, userAgent: navigator.userAgent })
+      setMessage('This device is subscribed.')
+    } catch (e) { setError((e as Error).message) }
+  }
+  async function disable() {
+    setError(null); setMessage(null)
+    try {
+      const reg = await navigator.serviceWorker.ready
+      const sub = await reg.pushManager.getSubscription()
+      if (sub) { await api.delete('/api/v1/push/subscriptions', { endpoint: sub.endpoint }); await sub.unsubscribe() }
+      setMessage('This device is unsubscribed.')
+    } catch (e) { setError((e as Error).message) }
+  }
+  async function test() {
+    setError(null); setMessage(null)
+    try { const r = await api.post<{ sent: number }>('/api/v1/push/test'); setMessage(`Sent ${r.sent} test notification(s).`) }
+    catch (e) { setError((e as Error).message) }
+  }
+  return (
+    <div className="data-panel">
+      <h2 className="data-panel__title">Notifications</h2>
+      <p className="form-note">Opt in to web push notifications for flight changes. Permission is requested only when you enable.</p>
+      {!supported && <p role="alert" className="form-error">Push notifications are not supported in this browser.</p>}
+      {supported && <p className="form-note">Permission: {permission}</p>}
+      <div className="actions-row">
+        <button className="btn" type="button" disabled={!supported || permission === 'denied' || vapid.isPending} onClick={() => void enable()}>Enable on this device</button>
+        <button className="btn-outline" type="button" disabled={!supported} onClick={() => void disable()}>Disable on this device</button>
+        <button className="btn-outline" type="button" disabled={!supported || permission !== 'granted'} onClick={() => void test()}>Send test</button>
+      </div>
+      {permission === 'denied' && <p role="alert" className="form-error">Permission denied. Enable notifications in browser settings.</p>}
+      {message && <p role="status" className="form-note">{message}</p>}
+      {error && <p role="alert" className="form-error">{error}</p>}
+      <p className="form-note">Anyone with access to this device can see notifications. Flight details in notifications are limited.</p>
+    </div>
+  )
 }
 
 function DeleteAccount({onDelete,pending}:{onDelete:(pw:string)=>void;pending:boolean}){const [password,setPassword]=useState('');const [open,setOpen]=useState(false);return <form className="data-panel" onSubmit={e=>{e.preventDefault();onDelete(password)}}><h2 className="data-panel__title">Privacy and account</h2><p className="form-note">Deleting your account permanently removes your personal logbook, notes, follows, and trips. The instance owner still has host-level database access.</p>{open?<><div className="field"><label htmlFor="delete-password">Confirm with your password</label><input id="delete-password" className="input" type="password" autoComplete="current-password" value={password} onChange={e=>setPassword(e.target.value)} required/></div><div className="actions-row"><button className="btn-outline" type="button" onClick={()=>setOpen(false)}>Keep account</button><button className="btn-danger" type="submit" disabled={pending}>{pending?'Deleting…':'Delete my account'}</button></div></>:<button className="btn-danger" type="button" onClick={()=>setOpen(true)}>Delete account</button>}</form>}

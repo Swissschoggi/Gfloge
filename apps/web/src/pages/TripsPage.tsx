@@ -7,6 +7,7 @@ import { formatDate, formatDuration, formatLocal } from '../format'
 import { IconChevron } from '../components/icons'
 import { StatusBadge } from '../components/StatusPresentation'
 import { AtlasSurface, toAtlasAirport } from '../components/FlightAtlas'
+import { exportTripCardPng } from '../lib/exportImage'
 
 type TripLogbook = {
   flown: Array<{ id: string; flight: TripRead['flights'][number]['flight'] }>
@@ -53,6 +54,7 @@ export function TripsPage() {
   const attach = useMutation({ mutationFn: ({ trip, userFlight }: { trip: string; userFlight: string }) => api.put(`/api/v1/trips/${trip}/flights/${userFlight}`), onSuccess: invalidate })
   const detach = useMutation({ mutationFn: ({ trip, userFlight }: { trip: string; userFlight: string }) => api.delete(`/api/v1/trips/${trip}/flights/${userFlight}`), onSuccess: invalidate })
   const updateTrip = useMutation({ mutationFn: (value: { id: string; name: string; description: string; startDate: string | null; endDate: string | null }) => api.patch(`/api/v1/trips/${value.id}`, value), onSuccess: invalidate })
+  const createTripShare = useMutation({ mutationFn: (tripId: string) => api.post<{ token: string; url: string }>('/api/v1/share/trips', { tripId }), onSuccess: (data) => setShareToken(data.token) })
   const [name, setName] = useState('')
   const [description, setDescription] = useState('')
   const [startDate, setStartDate] = useState('')
@@ -62,6 +64,7 @@ export function TripsPage() {
   const [editDescription, setEditDescription] = useState('')
   const [editStart, setEditStart] = useState('')
   const [editEnd, setEditEnd] = useState('')
+  const [shareToken, setShareToken] = useState<string | null>(null)
   const deleteDialog = useRef<HTMLDialogElement>(null)
   const selected = trips.data?.trips.find((trip) => trip.id === tripId)
 
@@ -246,6 +249,22 @@ export function TripsPage() {
                 {attach.isError && <p role="alert" className="form-error">Could not add that flight. It remains in your logbook.</p>}
               </section>
 
+              <section className="trip-share" aria-labelledby="trip-share-title">
+                <header className="trip-form-heading"><h2 id="trip-share-title">Sharing</h2></header>
+                <p className="form-note">Create a read-only public link for this itinerary.</p>
+                <button type="button" className="btn-outline" disabled={createTripShare.isPending} onClick={() => selected && createTripShare.mutate(selected.id)}>
+                  {createTripShare.isPending ? 'Creating…' : 'Create share link'}
+                </button>
+                {shareToken && <p className="form-note" role="status">Share URL: /share/trip/{shareToken}</p>}
+                <button type="button" className="btn-outline" style={{ marginTop: 'var(--space-2xs)' }} onClick={() => selected && exportTripCardPng({
+                  title: selected.name,
+                  flights: selected.flights.map((item) => ({
+                    depCode: (item.flight.departure.iata ?? item.flight.departure.icao) ?? '',
+                    arrCode: (item.flight.arrival.iata ?? item.flight.arrival.icao) ?? '',
+                    flightCode: item.flight.flightCode,
+                  })),
+                })}>Export PNG</button>
+              </section>
               <div className="trip-danger-zone">
                 <p>Deleting this group will not remove any flight from your logbook.</p>
                 <button type="button" className="btn-danger" onClick={() => deleteDialog.current?.showModal()}>Delete itinerary</button>

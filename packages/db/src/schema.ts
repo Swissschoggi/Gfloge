@@ -508,3 +508,81 @@ export const refCountries = pgTable('ref_countries', {
   alpha3: text('alpha3'),
   name: text('name').notNull(),
 })
+
+
+export const shareResourceType = pgEnum('share_resource_type', ['flight', 'trip'])
+
+export const shareLinks = pgTable(
+  'share_links',
+  {
+    id: uuid('id').primaryKey().defaultRandom(),
+    userId: uuid('user_id').notNull().references(() => users.id, { onDelete: 'cascade' }),
+    resourceType: shareResourceType('resource_type').notNull(),
+    resourceId: uuid('resource_id').notNull(),
+    tokenHash: text('token_hash').notNull(),
+    expiresAt: timestamp('expires_at', { withTimezone: true }),
+    revokedAt: timestamp('revoked_at', { withTimezone: true }),
+    createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
+  },
+  (t) => [uniqueIndex('share_links_token_key').on(t.tokenHash), index('share_links_user_idx').on(t.userId, t.resourceType)]
+)
+
+
+export const calendarFeeds = pgTable(
+  'calendar_feeds',
+  {
+    id: uuid('id').primaryKey().defaultRandom(),
+    userId: uuid('user_id').notNull().references(() => users.id, { onDelete: 'cascade' }),
+    tokenHash: text('token_hash').notNull(),
+    revokedAt: timestamp('revoked_at', { withTimezone: true }),
+    createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
+  },
+  (t) => [uniqueIndex('calendar_feeds_token_key').on(t.tokenHash), index('calendar_feeds_user_idx').on(t.userId)]
+)
+
+
+export const pushSubscriptions = pgTable(
+  'push_subscriptions',
+  {
+    id: uuid('id').primaryKey().defaultRandom(),
+    userId: uuid('user_id').notNull().references(() => users.id, { onDelete: 'cascade' }),
+    endpoint: text('endpoint').notNull(),
+    p256dh: text('p256dh').notNull(),
+    auth: text('auth').notNull(),
+    userAgent: text('user_agent'),
+    createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
+    lastUsedAt: timestamp('last_used_at', { withTimezone: true }),
+    failureCount: integer('failure_count').notNull().default(0),
+  },
+  (t) => [uniqueIndex('push_subscriptions_endpoint_key').on(t.endpoint), index('push_subscriptions_user_idx').on(t.userId)]
+)
+
+export const flightNotificationState = pgTable(
+  'flight_notification_state',
+  {
+    id: uuid('id').primaryKey().defaultRandom(),
+    userId: uuid('user_id').notNull().references(() => users.id, { onDelete: 'cascade' }),
+    userFlightId: uuid('user_flight_id').notNull().references(() => userFlights.id, { onDelete: 'cascade' }),
+    status: text('status'),
+    scheduledDeparture: timestamp('scheduled_departure', { withTimezone: true }),
+    scheduledArrival: timestamp('scheduled_arrival', { withTimezone: true }),
+    depGate: text('dep_gate'),
+    depTerminal: text('dep_terminal'),
+    arrGate: text('arr_gate'),
+    arrTerminal: text('arr_terminal'),
+    updatedAt: timestamp('updated_at', { withTimezone: true }).notNull().defaultNow(),
+  },
+  (t) => [uniqueIndex('flight_notification_state_key').on(t.userId, t.userFlightId)]
+)
+
+export const notificationDeliveries = pgTable(
+  'notification_deliveries',
+  {
+    id: uuid('id').primaryKey().defaultRandom(),
+    userId: uuid('user_id').notNull().references(() => users.id, { onDelete: 'cascade' }),
+    dedupKey: text('dedup_key').notNull(),
+    kind: text('kind').notNull(),
+    createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
+  },
+  (t) => [uniqueIndex('notification_deliveries_key').on(t.userId, t.dedupKey)]
+)

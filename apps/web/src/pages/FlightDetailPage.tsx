@@ -7,7 +7,9 @@ import { formatDate, formatDistance, formatDuration, formatLocal, sameUtcDay } f
 import { ConditionChip, StatusBadge } from '../components/StatusPresentation'
 import { TrackMap } from '../components/TrackMap'
 import { FlightProgress } from '../components/FlightProgress'
+import { diagnoseFlight } from '@gfloge/shared'
 import { ActivityFeed } from '../components/ActivityFeed'
+import { exportFlightCardPng } from '../lib/exportImage'
 
 const today = () => new Date().toISOString()
 
@@ -15,9 +17,16 @@ export function FlightDetailPage() {
   const { flightId = '' } = useParams()
   const navigate = useNavigate()
   const queryClient = useQueryClient()
+  const createShare = useMutation({
+    mutationFn: (userFlightId: string) => api.post<{ token: string; url: string }>('/api/v1/share/flights', { userFlightId }),
+    onSuccess: (data) => setShareToken(data.token),
+    onError: (cause) => setShareError(cause instanceof Error ? cause.message : 'Could not create share link'),
+  })
   const isManual = flightId.startsWith('manual:')
   const manualId = isManual ? flightId.slice(7) : null
   const [editing, setEditing] = useState(false)
+  const [shareToken, setShareToken] = useState<string | null>(null)
+  const [shareError, setShareError] = useState<string | null>(null)
   const [editError, setEditError] = useState<string | null>(null)
 
   const updateFlight = useMutation({
@@ -196,8 +205,16 @@ export function FlightDetailPage() {
             <h2 className="data-panel__title">Flight operations</h2>
             <TimeRow label={isHistoricalObservation ? 'Observed departure' : 'Scheduled departure'} value={f.scheduledDeparture} tz={f.departure.tz} airport={f.departure.iata ?? f.departure.icao} />
             {f.actualDeparture && <TimeRow label="Actual departure" value={f.actualDeparture} tz={f.departure.tz} airport={f.departure.iata ?? f.departure.icao} />}
+            {f.actualDeparture && (() => {
+              const delay = Math.round((new Date(f.actualDeparture).getTime() - new Date(f.scheduledDeparture).getTime()) / 60000)
+              return delay !== 0 ? <div className="readout-row"><span className="readout-row__label">Departure delay</span><span className="readout-row__value">{delay > 0 ? `+${delay} min` : `${delay} min`}</span></div> : null
+            })()}
             <TimeRow label={isHistoricalObservation ? 'Observed arrival' : 'Scheduled arrival'} value={f.scheduledArrival} tz={f.arrival.tz} airport={f.arrival.iata ?? f.arrival.icao} />
             {f.actualArrival && <TimeRow label="Actual arrival" value={f.actualArrival} tz={f.arrival.tz} airport={f.arrival.iata ?? f.arrival.icao} />}
+            {f.actualArrival && (() => {
+              const delay = Math.round((new Date(f.actualArrival).getTime() - new Date(f.scheduledArrival).getTime()) / 60000)
+              return delay !== 0 ? <div className="readout-row"><span className="readout-row__label">Arrival delay</span><span className="readout-row__value">{delay > 0 ? `+${delay} min` : `${delay} min`}</span></div> : null
+            })()}
             <div className="readout-row">
               <span className="readout-row__label">Duration</span>
               <span className="readout-row__value">
@@ -223,7 +240,7 @@ export function FlightDetailPage() {
                   <h2 className="data-panel__title">Aircraft</h2>
                   <div className="readout-row">
                     <span className="readout-row__label">Registration</span>
-                    <span className="readout-row__value">{f.aircraft.registration ?? 'not recorded'}</span>
+                    <span className="readout-row__value">{f.aircraft.registration ? <Link to={`/aircraft/${encodeURIComponent(f.aircraft.registration)}`}>{f.aircraft.registration}</Link> : 'not recorded'}</span>
                   </div>
                   <div className="readout-row">
                     <span className="readout-row__label">Type</span>
@@ -307,6 +324,37 @@ export function FlightDetailPage() {
           <ManualEditForm flight={f} onSave={(payload) => updateFlight.mutate(payload)} saving={updateFlight.isPending} error={editError} />
         </section>
       )}
+      {relation.data && (
+        <section className="data-panel" style={{ marginTop: 'var(--space-m)' }}>
+          <h2 className="data-panel__title">Sharing</h2>
+          <p className="form-note" style={{ marginBottom: 'var(--space-s)' }}>Create a read-only public link for this flight.</p>
+          <button type="button" className="btn-outline" disabled={createShare.isPending} onClick={() => { if (relation.data) createShare.mutate(relation.data.id) }}>
+            {createShare.isPending ? 'Creating…' : 'Create share link'}
+          </button>
+          {shareToken && <p className="form-note" role="status">Share URL: /share/flight/{shareToken}</p>}
+          <button type="button" className="btn-outline" style={{ marginTop: 'var(--space-2xs)' }} onClick={() => exportFlightCardPng({
+            flightCode: f.flightCode,
+            airlineName: f.airline?.name ?? null,
+            depCode: (f.departure.iata ?? f.departure.icao) ?? '',
+            arrCode: (f.arrival.iata ?? f.arrival.icao) ?? '',
+            departureTime: formatLocal(f.actualDeparture ?? f.scheduledDeparture, f.departure.tz),
+            arrivalTime: formatLocal(f.actualArrival ?? f.scheduledArrival, f.arrival.tz),
+            duration: formatDuration(Math.round((new Date(f.actualArrival ?? f.scheduledArrival).getTime() - new Date(f.actualDeparture ?? f.scheduledDeparture).getTime()) / 60000)),
+            status: f.status,
+          })}>Export PNG</button>
+          {shareError && <p role="alert" className="form-error">{shareError}</p>}
+        </section>
+      )}
+      {(() => {
+        const diagnostics = diagnoseFlight(f)
+        if (diagnostics.length === 0) return null
+        return (
+          <section className="data-panel" style={{ marginTop: 'var(--space-m)' }}>
+            <h2 className="data-panel__title">Data quality</h2>
+            <ul>{diagnostics.map((d) => <li key={d.code} className={d.severity === 'error' ? 'form-error' : 'form-note'}>{d.message}</li>)}</ul>
+          </section>
+        )
+      })()}
       <section className="data-panel" style={{ marginTop: 'var(--space-m)' }}>
         <h2 className="data-panel__title">Activity history</h2>
         <ActivityFeed flightId={flightId} />

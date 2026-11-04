@@ -1,16 +1,11 @@
-/* The atlas: a glowing screen. Always midnight violet, in light and dark themes. */
+/* The atlas: theme-aware geography. */
 
 .atlas-panel {
-  --bg: #0d0021; --surface: #05010d; --surface-2: #150a2e; --surface-3: #1e1140;
-  --ink: #fff; --ink-2: #d9d6e6; --ink-3: #a29fb2;
-  --line: rgba(255,255,255,.09); --line-strong: rgba(255,255,255,.22);
-  --accent-ink: #6db1ff; --focus: #6db1ff;
-  color: var(--ink); color-scheme: dark;
-
+  color: var(--ink);
   display: grid; grid-template-rows: auto minmax(0, 1fr) auto; min-width: 0; min-height: 0;
-  background: var(--gradient-pulse);
+  background: var(--map-ocean);
   border-radius: var(--radius-panel); overflow: hidden;
-  box-shadow: var(--shadow-float);
+  box-shadow: var(--shadow-card);
 }
 .atlas-panel__topline, .atlas-panel__footer {
   display: flex; align-items: center; gap: var(--space-m); min-height: 44px; padding-inline: var(--space-l);
@@ -42,10 +37,10 @@
 .atlas-place-label text { font-weight: 500; paint-order: stroke; stroke: var(--map-land); stroke-width: 2px; stroke-linejoin: round; }
 
 .atlas-route { fill: none; stroke: var(--map-route); stroke-width: 1.35; opacity: .6; vector-effect: non-scaling-stroke; }
-.atlas-route--selected { stroke: var(--map-selected-route); stroke-width: 2.6; opacity: 1; filter: drop-shadow(0 0 6px rgba(255,255,255,.55)); }
-.atlas-route--track { fill: none; stroke: #a393ff; stroke-width: 2.6; opacity: 1; vector-effect: non-scaling-stroke; filter: drop-shadow(0 0 6px var(--glow-route)); }
-.atlas-live-position circle { fill: var(--map-selected-route); stroke: #7c5cff; stroke-width: 2; filter: drop-shadow(0 0 8px #a393ff); }
-.atlas-live-position path { fill: none; stroke: #0d0021; stroke-width: 1.25; }
+.atlas-route--selected { stroke: var(--map-selected-route); stroke-width: 2.6; opacity: 1; filter: drop-shadow(0 0 6px var(--glow-route)); }
+.atlas-route--track { fill: none; stroke: var(--map-route); stroke-width: 2.6; opacity: 1; vector-effect: non-scaling-stroke; filter: drop-shadow(0 0 6px var(--glow-route)); }
+.atlas-live-position circle { fill: var(--map-selected-route); stroke: var(--map-route); stroke-width: 2; filter: drop-shadow(0 0 8px var(--glow-route)); }
+.atlas-live-position path { fill: none; stroke: var(--map-ocean); stroke-width: 1.25; }
 .atlas-airport { vector-effect: non-scaling-stroke; }
 .atlas-airport--origin { fill: var(--map-ocean); stroke: var(--map-selected-route); stroke-width: 2; }
 .atlas-airport--destination { fill: var(--map-selected-route); stroke: var(--map-ocean); stroke-width: 1.5; }
@@ -72,6 +67,6 @@
 .atlas-controls .atlas-controls__center { width: 100%; padding-inline: var(--space-s); font-size: var(--step--2); font-weight: 600; white-space: nowrap; border-radius: var(--radius-pill); }
 
 .atlas-legend__route { width: 20px; border-top: 2.5px solid var(--map-selected-route); border-radius: 2px; }
-.atlas-legend__track { width: 20px; border-top: 2.5px solid #a393ff; border-radius: 2px; }
+.atlas-legend__track { width: 20px; border-top: 2.5px solid var(--map-route); border-radius: 2px; }
 .atlas-legend__origin { width: 9px; height: 9px; border: 2px solid var(--map-selected-route); border-radius: 50%; }
 .atlas-legend__destination { width: 8px; height: 8px; background: var(--map-selected-route); transform: rotate(45deg); }
