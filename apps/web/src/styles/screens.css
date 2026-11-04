@@ -437,7 +437,8 @@
   .atlas-panel__hint { display: none !important; }
   .atlas-controls button { min-width: 40px; min-height: 40px; }
   .atlas-panel__footer .atlas-panel__source { display: none; }
-  .atlas-controls > div:nth-of-type(n+2), .atlas-controls__rule { display: none; }
+  /* touch: drag pans, so keep only zoom, reset and center */
+  .atlas-controls > div, .atlas-controls__rule, .atlas-controls [aria-label^="Pan map"] { display: none; }
   .atlas-panel__footer { flex-wrap: nowrap; overflow: hidden; }
 
   .logbook-masthead { align-items: flex-start; }
