@@ -370,3 +370,46 @@ export type ProviderStatus = {
   credentialHint: string | null
   implemented?: boolean
 }
+
+// ===== Flight discovery (SerpApi Google Flights offers) =====
+
+export type FlightDiscoveryAirport = {
+  name?: string
+  id?: string
+  time?: string
+}
+
+export type FlightDiscoveryLeg = {
+  departure_airport?: FlightDiscoveryAirport
+  arrival_airport?: FlightDiscoveryAirport
+  duration?: number
+  airplane?: string
+  airline?: string
+  airline_logo?: string
+  flight_number?: string
+  legroom?: string
+  extensions?: string[]
+  ticket_also_sold_by?: string[]
+  overnight?: boolean
+}
+
+export type FlightDiscoveryOffer = {
+  flights?: FlightDiscoveryLeg[]
+  layovers?: Array<{ duration?: number; name?: string; id?: string; overnight?: boolean }>
+  total_duration?: number
+  carbon_emissions?: { this_flight?: number; typical_for_this_route?: number; difference_percent?: number }
+  price?: number
+  type?: string
+  airline_logo?: string
+  departure_token?: string
+  booking_token?: string
+}
+
+export type FlightDiscoveryResult = {
+  retrievedAt?: string
+  best_flights?: FlightDiscoveryOffer[]
+  other_flights?: FlightDiscoveryOffer[]
+  price_insights?: { lowest_price?: number; price_level?: string; typical_price_range?: number[] }
+  search_metadata?: { status?: string; created_at?: string }
+  error?: string
+}

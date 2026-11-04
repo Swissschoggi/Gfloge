@@ -10,6 +10,7 @@ import {
 } from 'd3-geo'
 import type { FeatureCollection, Geometry, Point } from 'geojson'
 import type { AirportInfo, AirportSearchResult, BoardPayload } from '@gfloge/shared'
+import { api } from '../api/client'
 
 type BoardItem = BoardPayload['active'][number]
 type CountryProperties = { name: string; continent: string; labelRank: number }
@@ -31,6 +32,7 @@ export type AtlasAirport = {
 
 export type AtlasRoute = {
   id: string
+  code?: string | null
   from: AtlasAirport
   to: AtlasAirport
   track?: Array<{ lon: number; lat: number }>
@@ -86,7 +88,7 @@ export function toAtlasAirport(airport: AirportInfo | (AirportSearchResult & { l
   }
 }
 
-export function FlightAtlas({ items, selected }: { items: BoardItem[]; selected: BoardItem | null }) {
+export function FlightAtlas({ items, selected, onSelectFlight }: { items: BoardItem[]; selected: BoardItem | null; onSelectFlight?: (id: string | null) => void }) {
   const { routes, airports } = useMemo(() => {
     const byId = new Map<string, AtlasAirport>()
     const routes = items.map((item) => {
@@ -94,7 +96,7 @@ export function FlightAtlas({ items, selected }: { items: BoardItem[]; selected:
       const to = toAtlasAirport(item.flight.arrival)
       byId.set(from.id, from)
       byId.set(to.id, to)
-      return { id: item.userFlightId, from, to }
+      return { id: item.userFlightId, code: item.flight.flightCode, from, to }
     })
     return { routes, airports: [...byId.values()] }
   }, [items])
@@ -104,6 +106,7 @@ export function FlightAtlas({ items, selected }: { items: BoardItem[]; selected:
       routes={routes}
       airports={airports}
       selectedRouteId={selected?.userFlightId ?? null}
+      onSelectRoute={onSelectFlight}
       heading="World overview"
       countLabel={`${items.length} ${items.length === 1 ? 'route' : 'routes'}`}
       footerLabel="Airport positions from Gfloge reference data"
@@ -116,7 +119,8 @@ export function AtlasSurface({
   routes,
   airports,
   selectedRouteId = null,
-  featuredAirportId = null,
+  featuredAirportId: initialFeaturedAirportId = null,
+  onSelectRoute,
   heading = 'World overview',
   countLabel,
   footerLabel = 'Made with Natural Earth · public-domain geography',
@@ -126,6 +130,7 @@ export function AtlasSurface({
   airports: AtlasAirport[]
   selectedRouteId?: string | null
   featuredAirportId?: string | null
+  onSelectRoute?: (id: string | null) => void
   heading?: string
   countLabel?: string
   footerLabel?: string
@@ -134,14 +139,45 @@ export function AtlasSurface({
   const world = useWorldAtlas()
   const [view, setView] = useState(INITIAL_VIEW)
   const [dragging, setDragging] = useState(false)
+  const [featuredAirportId, setFeaturedAirportId] = useState<string | null>(initialFeaturedAirportId)
+  const [searchQuery, setSearchQuery] = useState('')
+  const [searchOpen, setSearchOpen] = useState(false)
   const svgRef = useRef<SVGSVGElement>(null)
-  const dragRef = useRef<{ x: number; y: number; viewX: number; viewY: number } | null>(null)
+  const dragRef = useRef<{ x: number; y: number; viewX: number; viewY: number; scale: number } | null>(null)
+  const rafRef = useRef<number | null>(null)
+  const pendingViewRef = useRef<View | null>(null)
+  function scheduleView(next: View) {
+    pendingViewRef.current = next
+    if (rafRef.current === null) {
+      rafRef.current = window.requestAnimationFrame(() => {
+        rafRef.current = null
+        const pending = pendingViewRef.current
+        if (pending) setView(pending)
+      })
+    }
+  }
   const projection = useMemo(() => {
     if (!world.data) return null
     return geoNaturalEarth1().fitExtent([[16, 20], [WIDTH - 16, HEIGHT - 20]], world.data.countries)
   }, [world.data])
   const path = useMemo(() => projection ? geoPath(projection) : null, [projection])
   const selectedRoute = routes.find((route) => route.id === selectedRouteId) ?? null
+
+  const airportSearch = useQuery({
+    queryKey: ['atlas-airports', searchQuery],
+    queryFn: () => api.get<{ results: AirportSearchResult[] }>(`/api/v1/airports?q=${encodeURIComponent(searchQuery)}`).then((r) => r.results),
+    enabled: searchQuery.trim().length >= 2,
+  })
+
+  const searchResults = useMemo(() => {
+    const q = searchQuery.trim().toLowerCase()
+    if (!q) return { airports: [], flights: [] }
+    const airports = (airportSearch.data ?? []).filter((a) => a.lat !== null && a.lon !== null).slice(0, 6)
+    const flights = routes
+      .filter((route) => (route.code ?? '').toLowerCase().includes(q) || route.id.toLowerCase().includes(q))
+      .slice(0, 6)
+    return { airports, flights }
+  }, [airportSearch.data, routes, searchQuery])
 
   const worldCountries = useMemo(() => {
     if (!world.data || !path || !projection) return null
@@ -253,6 +289,23 @@ export function AtlasSurface({
     setView(clampView({ scale, x: WIDTH / 2 - point[0] * scale, y: HEIGHT / 2 - point[1] * scale }))
   }
 
+  function centerAirport(airport: AtlasAirport) {
+    if (!projection) return
+    const point = projection([airport.lon, airport.lat])
+    if (!point) return
+    const scale = 4
+    setView(clampView({ scale, x: WIDTH / 2 - point[0] * scale, y: HEIGHT / 2 - point[1] * scale }))
+    setFeaturedAirportId(airport.id)
+  }
+
+  function resetSelection() {
+    setFeaturedAirportId(null)
+    setSearchQuery('')
+    setSearchOpen(false)
+    if (onSelectRoute) onSelectRoute(null)
+    setView(INITIAL_VIEW)
+  }
+
   function onWheel(event: WheelEvent<SVGSVGElement>) {
     event.preventDefault()
     zoomAt(event.deltaY < 0 ? 1.18 : 1 / 1.18, event.clientX, event.clientY)
@@ -268,6 +321,54 @@ export function AtlasSurface({
         <span className="atlas-panel__route-count">{countLabel ?? `${routes.length} ${routes.length === 1 ? 'route' : 'routes'}`}</span>
       </div>
 
+      <div className="atlas-search" style={{ padding: 'var(--space-xs) var(--space-m)' }}>
+        <input
+          className="input"
+          type="search"
+          placeholder="Search airport or flight…"
+          value={searchQuery}
+          onChange={(event) => { setSearchQuery(event.target.value); setSearchOpen(true) }}
+          onFocus={() => setSearchOpen(true)}
+          onBlur={() => window.setTimeout(() => setSearchOpen(false), 150)}
+          aria-label="Search map"
+        />
+        {searchOpen && searchQuery.trim().length >= 2 && (searchResults.airports.length > 0 || searchResults.flights.length > 0) && (
+          <ul className="combobox-list" role="listbox" aria-label="Map search results" style={{ position: 'absolute', zIndex: 5, width: 'calc(100% - 2rem)', margin: 'var(--space-2xs) var(--space-m)' }}>
+            {searchResults.airports.map((airport) => (
+              <li key={airport.id}>
+                <button type="button" role="option" aria-selected={false} onClick={() => {
+                  const atlasAirport = toAtlasAirport(airport as AirportSearchResult & { lat: number; lon: number })
+                  centerAirport(atlasAirport)
+                  setSearchOpen(false)
+                }}>
+                  <span>{airport.iata ?? airport.icao ?? '—'}</span>
+                  <span>{airport.name}</span>
+                  <small>{[airport.city, airport.country].filter(Boolean).join(' · ')}</small>
+                </button>
+              </li>
+            ))}
+            {searchResults.flights.map((route) => (
+              <li key={route.id}>
+                <button type="button" role="option" aria-selected={false} onClick={() => {
+                  if (onSelectRoute) onSelectRoute(route.id)
+                  if (projection) {
+                    const midpoint = geoInterpolate([route.from.lon, route.from.lat], [route.to.lon, route.to.lat])(0.5)
+                    const point = projection(midpoint)
+                    if (point) setView(clampView({ scale: 2.25, x: WIDTH / 2 - point[0] * 2.25, y: HEIGHT / 2 - point[1] * 2.25 }))
+                  }
+                  setSearchOpen(false)
+                }}>
+                  <span>{route.code ?? route.id}</span>
+                  <span>{route.from.code ?? route.from.name} → {route.to.code ?? route.to.name}</span>
+                </button>
+              </li>
+            ))}
+            {searchResults.airports.length === 0 && searchResults.flights.length === 0 && (
+              <li><span>No results</span></li>
+            )}
+          </ul>
+        )}
+      </div>
       <div className="atlas-canvas">
         {world.data && projection && path && worldCountries ? (
           <svg
@@ -280,7 +381,7 @@ export function AtlasSurface({
             onPointerDown={(event) => {
               if (event.button !== 0) return
               const [x, y] = svgPoint(event.clientX, event.clientY)
-              dragRef.current = { x, y, viewX: view.x, viewY: view.y }
+              dragRef.current = { x, y, viewX: view.x, viewY: view.y, scale: view.scale }
               setDragging(true)
               event.currentTarget.setPointerCapture(event.pointerId)
             }}
@@ -290,7 +391,7 @@ export function AtlasSurface({
               const [x, y] = svgPoint(event.clientX, event.clientY)
               const dx = x - start.x
               const dy = y - start.y
-              setView((current) => clampView({ ...current, x: start.viewX + dx, y: start.viewY + dy }))
+              scheduleView(clampView({ scale: start.scale, x: start.viewX + dx, y: start.viewY + dy }))
             }}
             onPointerUp={() => { dragRef.current = null; setDragging(false) }}
             onPointerCancel={() => { dragRef.current = null; setDragging(false) }}
@@ -383,6 +484,7 @@ export function AtlasSurface({
           </div>
           <button type="button" onClick={() => pan(0, 80)} aria-label="Pan map south">↓</button>
           {selectedRoute && <button className="atlas-controls__center" type="button" onClick={centerRoute}>Center selected</button>}
+          {(featuredAirportId || selectedRouteId) && <button className="atlas-controls__center" type="button" onClick={resetSelection}>Reset selection</button>}
         </div>
       </div>
 

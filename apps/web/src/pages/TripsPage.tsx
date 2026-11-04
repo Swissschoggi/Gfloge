@@ -3,13 +3,39 @@ import { Link, useNavigate, useParams } from 'react-router'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import type { TripRead } from '@gfloge/shared'
 import { api } from '../api/client'
-import { formatDate, formatLocal } from '../format'
+import { formatDate, formatDuration, formatLocal } from '../format'
 import { IconChevron } from '../components/icons'
+import { StatusBadge } from '../components/StatusPresentation'
+import { AtlasSurface, toAtlasAirport } from '../components/FlightAtlas'
 
 type TripLogbook = {
   flown: Array<{ id: string; flight: TripRead['flights'][number]['flight'] }>
   planned: Array<{ id: string; flight: TripRead['flights'][number]['flight'] }>
   manual: Array<{ id: string; flight: TripRead['flights'][number]['flight'] }>
+}
+
+
+
+function connectionInfo(current: TripRead['flights'][number]['flight'], next: TripRead['flights'][number]['flight']): { text: string; warning: boolean } {
+  const arrIso = current.actualArrival ?? current.scheduledArrival
+  const depIso = next.scheduledDeparture
+  const arrTime = Date.parse(arrIso)
+  const depTime = Date.parse(depIso)
+  const airportChange = (current.arrival.iata ?? current.arrival.icao) !== (next.departure.iata ?? next.departure.icao)
+  const missingTz = !current.arrival.tz || !next.departure.tz
+  if (!Number.isFinite(arrTime) || !Number.isFinite(depTime)) {
+    return { text: 'Connection time cannot be calculated because arrival or departure time data is missing.', warning: true }
+  }
+  const minutes = Math.round((depTime - arrTime) / 60000)
+  if (minutes < 0) {
+    return { text: `Connection timing is inconsistent (arrival after next departure by ${formatDuration(Math.abs(minutes))}). Check dates and times.`, warning: true }
+  }
+  const parts = [`Connection time: ${formatDuration(minutes)}`]
+  if (airportChange) parts.push('airport change required')
+  if (missingTz) parts.push('timezone information is missing')
+  parts.push('this is a heuristic; airport-specific minimum connection times are not available')
+  const warning = minutes < 120 || airportChange
+  return { text: parts.join(' · '), warning }
 }
 
 export function TripsPage() {
@@ -88,7 +114,7 @@ export function TripsPage() {
       {tripId && <button type="button" className="back-link" onClick={() => navigate(-1)}>← Back</button>}
       <header className="trips-heading">
         <div>
-          <p className="eyebrow">Personal planning / itinerary groups</p>
+          <p className="eyebrow">Itineraries</p>
           <h1>{selected?.name ?? 'Trips'}</h1>
           <p>{selected ? `${selected.flights.length} ${selected.flights.length === 1 ? 'flight' : 'flights'} in this itinerary` : 'Group saved flights into journeys without changing your logbook.'}</p>
         </div>
@@ -139,21 +165,67 @@ export function TripsPage() {
               </form>
 
               <section className="trip-itinerary-section" aria-labelledby="trip-itinerary-title">
-                <header className="trip-form-heading"><h2 id="trip-itinerary-title">Flight sequence</h2><span>{selected.flights.length} legs</span></header>
+                <header className="trip-form-heading"><h2 id="trip-itinerary-title">Itinerary timeline</h2><span>{selected.flights.length} legs</span></header>
                 {selected.flights.length ? (
-                  <ol className="trip-itinerary">
-                    {selected.flights.map((item, index) => (
-                      <li key={item.id}>
-                        <span className="trip-itinerary__number">{String(index + 1).padStart(2, '0')}</span>
-                        <Link to={`/flight/${item.flight.id}`} className="trip-itinerary__route">
-                          <strong>{item.flight.departure.iata} <span>→</span> {item.flight.arrival.iata}</strong>
-                          <small>{item.flight.flightCode} · {formatDate(item.flight.scheduledDeparture, item.flight.departure.tz)}</small>
-                        </Link>
-                        <time>{formatLocal(item.flight.scheduledDeparture, item.flight.departure.tz)}</time>
-                        <button type="button" className="btn-quiet-danger" disabled={detach.isPending} onClick={() => detach.mutate({ trip: selected.id, userFlight: item.id })} aria-label={`Remove ${item.flight.flightCode} from ${selected.name}`}>Remove</button>
-                      </li>
-                    ))}
-                  </ol>
+                  <>
+                    <ol className="trip-itinerary">
+                      {selected.flights
+                        .slice()
+                        .sort((a, b) => a.flight.scheduledDeparture.localeCompare(b.flight.scheduledDeparture))
+                        .map((item, index, list) => {
+                          const next = list[index + 1]
+                          const depCode = item.flight.departure.iata ?? item.flight.departure.icao
+                          const arrCode = item.flight.arrival.iata ?? item.flight.arrival.icao
+                          const planned = item.loggedState === 'planned'
+                          const completed = item.flight.status === 'arrived'
+                          const cancelled = item.flight.status === 'cancelled' || item.flight.cancelled
+                          const statusLabel = cancelled ? 'Cancelled' : completed ? 'Completed' : planned ? 'Planned (unconfirmed)' : 'Confirmed'
+                          const connection = next ? connectionInfo(item.flight, next.flight) : null
+                          return (
+                            <li key={item.id}>
+                              <span className="trip-itinerary__number">{String(index + 1).padStart(2, '0')}</span>
+                              <div className="trip-itinerary__route">
+                                <Link to={`/flight/${item.flight.id}`}>
+                                  <strong>{depCode} <span>→</span> {arrCode}</strong>
+                                </Link>
+                                <small>{item.flight.flightCode} · {formatDate(item.flight.scheduledDeparture, item.flight.departure.tz)} · {item.flight.airline?.name ?? 'Unknown airline'}</small>
+                                <div className="trip-itinerary__times">
+                                  <span>Departs {formatLocal(item.flight.scheduledDeparture, item.flight.departure.tz)} {depCode} local</span>
+                                  <span>Arrives {formatLocal(item.flight.actualArrival ?? item.flight.scheduledArrival, item.flight.arrival.tz)} {arrCode} local</span>
+                                  {item.flight.depTerminal || item.flight.depGate ? <span>Departure gate {[item.flight.depTerminal, item.flight.depGate].filter(Boolean).join(' / ')}</span> : null}
+                                  {item.flight.arrTerminal || item.flight.arrGate ? <span>Arrival gate {[item.flight.arrTerminal, item.flight.arrGate].filter(Boolean).join(' / ')}</span> : null}
+                                </div>
+                                <div className="trip-itinerary__status"><StatusBadge status={item.flight.status} /> <span className="form-note">{statusLabel}</span></div>
+                                {connection && (
+                                  <p className={`form-note${connection.warning ? ' form-error' : ''}`} role={connection.warning ? 'alert' : 'status'}>
+                                    {connection.text}
+                                  </p>
+                                )}
+                              </div>
+                              <button type="button" className="btn-quiet-danger" disabled={detach.isPending} onClick={() => detach.mutate({ trip: selected.id, userFlight: item.id })} aria-label={`Remove ${item.flight.flightCode} from ${selected.name}`}>Remove</button>
+                            </li>
+                          )
+                        })}
+                    </ol>
+                    <section className="trip-map" aria-label="Trip route map">
+                      <h3>Route map</h3>
+                      <AtlasSurface
+                        routes={selected.flights
+                          .slice()
+                          .sort((a, b) => a.flight.scheduledDeparture.localeCompare(b.flight.scheduledDeparture))
+                          .map((item) => ({
+                            id: item.id,
+                            code: item.flight.flightCode,
+                            from: toAtlasAirport(item.flight.departure),
+                            to: toAtlasAirport(item.flight.arrival),
+                          }))}
+                        airports={[]}
+                        heading="Trip route"
+                        countLabel={`${selected.flights.length} legs`}
+                        footerLabel="Great-circle routes from saved flights"
+                      />
+                    </section>
+                  </>
                 ) : (
                   <p className="trip-itinerary__empty">This itinerary has no flights yet. Add a saved flight from your logbook below.</p>
                 )}

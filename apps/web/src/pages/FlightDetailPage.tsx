@@ -135,7 +135,7 @@ export function FlightDetailPage() {
         <h1 className="hero__code">{f.flightCode}</h1>
         <div className="hero__route flight-detail-route">
           <div className="hero__end">
-            <span className="hero__iata">{f.departure.iata}</span>
+            <span className="hero__iata">{f.departure.iata ?? f.departure.icao}</span>
             <span className="hero__city">{f.departure.city}</span>
           </div>
           <span className="hero__arrow" aria-hidden="true">
@@ -143,7 +143,7 @@ export function FlightDetailPage() {
             {f.distanceKm !== null && <span className="hero__distance">{formatDistance(f.distanceKm)}</span>}
           </span>
           <div className="hero__end hero__end--arr">
-            <span className="hero__iata">{f.arrival.iata}</span>
+            <span className="hero__iata">{f.arrival.iata ?? f.arrival.icao}</span>
             <span className="hero__city">{f.arrival.city}</span>
           </div>
         </div>
@@ -173,14 +173,17 @@ export function FlightDetailPage() {
              </div>
            )}
            {f.fieldSources && Object.keys(f.fieldSources).length > 0 && (
-             <p className="form-note">Manually corrected: {Object.keys(f.fieldSources).join(', ')}</p>
+             <div className="data-panel">
+               <h2 className="data-panel__title">Corrected fields</h2>
+               <p className="form-note" style={{ margin: 0 }}>You overrode provider data for: {Object.keys(f.fieldSources).join(', ')}.</p>
+             </div>
            )}
           {(alerts.data?.alerts ?? []).map((a) => (
             <div className="alertbanner" role="alert" key={a.id}>
               <strong>Update:</strong>
               <span>
                 {a.type === 'time_shift'
-                  ? `Departure moved to ${formatLocal(newDateAsIso(a.new), f.departure.tz)} ${f.departure.iata} local (was ${formatLocal(
+                  ? `Departure moved to ${formatLocal(newDateAsIso(a.new), f.departure.tz)} ${(f.departure.iata ?? f.departure.icao)} local (was ${formatLocal(
                       oldDateAsIso(a.old),
                       f.departure.tz
                     )})`
@@ -190,20 +193,11 @@ export function FlightDetailPage() {
           ))}
 
           <div className="data-panel">
-            <h2 className="data-panel__title">Times</h2>
-            <TimeRow label={isHistoricalObservation ? 'Observed departure' : 'Scheduled departure'} value={f.scheduledDeparture} tz={f.departure.tz} airport={f.departure.iata} />
-            {f.actualDeparture && <TimeRow label="Actual departure" value={f.actualDeparture} tz={f.departure.tz} airport={f.departure.iata} />}
-            <TimeRow label={isHistoricalObservation ? 'Observed arrival' : 'Scheduled arrival'} value={f.scheduledArrival} tz={f.arrival.tz} airport={f.arrival.iata} />
-            {f.actualArrival && <TimeRow label="Actual arrival" value={f.actualArrival} tz={f.arrival.tz} airport={f.arrival.iata} />}
-            {(f.depGate || f.depTerminal || f.arrGate || f.arrTerminal) && (
-              <div className="readout-row">
-                <span className="readout-row__label">Gates</span>
-                <span className="readout-row__value">
-                  {[f.depTerminal, f.depGate].filter(Boolean).join(' / ') || 'not published'} →{' '}
-                  {[f.arrTerminal, f.arrGate].filter(Boolean).join(' / ') || 'not published'}
-                </span>
-              </div>
-            )}
+            <h2 className="data-panel__title">Flight operations</h2>
+            <TimeRow label={isHistoricalObservation ? 'Observed departure' : 'Scheduled departure'} value={f.scheduledDeparture} tz={f.departure.tz} airport={f.departure.iata ?? f.departure.icao} />
+            {f.actualDeparture && <TimeRow label="Actual departure" value={f.actualDeparture} tz={f.departure.tz} airport={f.departure.iata ?? f.departure.icao} />}
+            <TimeRow label={isHistoricalObservation ? 'Observed arrival' : 'Scheduled arrival'} value={f.scheduledArrival} tz={f.arrival.tz} airport={f.arrival.iata ?? f.arrival.icao} />
+            {f.actualArrival && <TimeRow label="Actual arrival" value={f.actualArrival} tz={f.arrival.tz} airport={f.arrival.iata ?? f.arrival.icao} />}
             <div className="readout-row">
               <span className="readout-row__label">Duration</span>
               <span className="readout-row__value">
@@ -214,6 +208,12 @@ export function FlightDetailPage() {
                 )}
               </span>
             </div>
+            {(f.depTerminal || f.depGate || f.arrTerminal || f.arrGate) && (
+              <div className="readout-row">
+                <span className="readout-row__label">Terminals / gates</span>
+                <span className="readout-row__value">{[f.depTerminal, f.depGate].filter(Boolean).join(' / ') || 'not recorded'} → {[f.arrTerminal, f.arrGate].filter(Boolean).join(' / ') || 'not recorded'}</span>
+              </div>
+            )}
           </div>
 
           {(f.aircraft && (f.aircraft.registration || f.aircraft.icaoType)) || f.seatType || f.bookingReference || f.flightReason || f.sourceName || f.cancelled || f.divertedTo || f.depTerminal || f.depGate || f.arrTerminal || f.arrGate ? (
@@ -233,22 +233,9 @@ export function FlightDetailPage() {
                   </div>
                 </div>
               )}
-              {(f.depTerminal || f.depGate || f.arrTerminal || f.arrGate) && (
-                <div className="data-panel">
-                  <h2 className="data-panel__title">Airport operations</h2>
-                  <div className="readout-row">
-                    <span className="readout-row__label">Departure terminal / gate</span>
-                    <span className="readout-row__value">{[f.depTerminal, f.depGate].filter(Boolean).join(' / ') || 'not recorded'}</span>
-                  </div>
-                  <div className="readout-row">
-                    <span className="readout-row__label">Arrival terminal / gate</span>
-                    <span className="readout-row__value">{[f.arrTerminal, f.arrGate].filter(Boolean).join(' / ') || 'not recorded'}</span>
-                  </div>
-                </div>
-              )}
               {(f.seatType || f.bookingReference || f.flightReason || f.sourceName || f.cancelled || f.divertedTo) && (
                 <div className="data-panel">
-                  <h2 className="data-panel__title">Personal record</h2>
+                  <h2 className="data-panel__title">Your experience</h2>
                   {f.seatType && <div className="readout-row"><span className="readout-row__label">Seat type</span><span className="readout-row__value">{f.seatType}</span></div>}
                   {f.bookingReference && <div className="readout-row"><span className="readout-row__label">Booking reference</span><span className="readout-row__value">{f.bookingReference}</span></div>}
                   {f.flightReason && <div className="readout-row"><span className="readout-row__label">Reason</span><span className="readout-row__value">{f.flightReason}</span></div>}
@@ -269,13 +256,6 @@ export function FlightDetailPage() {
               )}
             </>
           ) : null}
-
-          <div className="data-panel">
-            <h2 className="data-panel__title">Airport weather</h2>
-            <ConditionChip condition="unavailable" />
-            <p className="form-note">Weather observations are not available for this flight.</p>
-            <div className="weather-pair"><span>{f.departure.iata} · {f.departure.tz}</span><span>{f.arrival.iata} · {f.arrival.tz}</span></div>
-          </div>
 
           {relation.data && relation.data.role === 'logged' ? (
             <LogEditor
@@ -328,7 +308,7 @@ export function FlightDetailPage() {
         </section>
       )}
       <section className="data-panel" style={{ marginTop: 'var(--space-m)' }}>
-        <h2 className="data-panel__title">Activity</h2>
+        <h2 className="data-panel__title">Activity history</h2>
         <ActivityFeed flightId={flightId} />
       </section>
     </article>

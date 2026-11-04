@@ -40,6 +40,7 @@
   box-shadow: var(--shadow-float); transform: rotate(-1.2deg);
   transition: transform var(--dur) var(--ease-out);
 }
+@media (prefers-reduced-motion: reduce) { .selected-flight { transform: none; } .selected-flight:hover { transform: none; } }
 .selected-flight:hover { transform: rotate(0); }
 .selected-flight__heading { display: flex; align-items: center; justify-content: space-between; gap: var(--space-s); }
 .selected-flight__badges { display: flex; align-items: center; justify-content: flex-end; gap: var(--space-xs); flex-wrap: wrap; }
