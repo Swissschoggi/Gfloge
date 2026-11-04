@@ -3,7 +3,7 @@ import { eq } from 'drizzle-orm'
 import { mkdir, unlink, writeFile } from "node:fs/promises"
 import path from 'node:path'
 import { airports, airlines, historicalDatasets, manualFlights, userFlights } from '@gfloge/db'
-import { distanceKm } from '@gfloge/shared'
+import { distanceKm, utcDateKey } from '@gfloge/shared'
 import { seedCatalog, listDatasets, dataDir } from '../historical/catalog.js'
 import { claimDataset, installDataset, removeDataset } from '../historical/installer.js'
 import { searchHistorical } from '../historical/query.js'
@@ -91,8 +91,16 @@ export function registerHistoricalRoutes(app: FastifyInstance): void {
       const rows = await db.select({ id: airlines.id }).from(airlines).where(eq(airlines.icao, candidate.airlineIcao)).limit(1)
       airlineId = rows[0]?.id ?? null
     }
-    const depUtc = candidate.departureTimeUtc ? new Date(String(candidate.departureTimeUtc)) : new Date(`${date}T00:00:00Z`)
-    const arrUtc = candidate.arrivalTimeUtc ? new Date(String(candidate.arrivalTimeUtc)) : new Date(depUtc.getTime() + 60 * 60_000)
+    const depRaw = typeof candidate.departureTimeUtc === 'string' ? candidate.departureTimeUtc : ''
+    const arrRaw = typeof candidate.arrivalTimeUtc === 'string' ? candidate.arrivalTimeUtc : ''
+    if (!depRaw || !arrRaw) {
+      return reply.code(409).send({ error: { code: 'candidate_incomplete', message: 'The historical observation has no complete pair of times. Enter the missing journey details manually.' } })
+    }
+    const depUtc = parseHistoricalUtc(depRaw)
+    const arrUtc = parseHistoricalUtc(arrRaw)
+    if (!depUtc || !arrUtc || arrUtc <= depUtc) {
+      return reply.code(400).send({ error: { code: 'invalid_candidate_time', message: 'The historical dataset returned invalid departure or arrival times.' } })
+    }
     const [manual] = await db.insert(manualFlights).values({
       userId,
       airlineId,
@@ -101,7 +109,7 @@ export function registerHistoricalRoutes(app: FastifyInstance): void {
       arrivalAirportId: arrAirport.id,
       scheduledDeparture: depUtc,
       scheduledArrival: arrUtc,
-      depDateKey: date,
+      depDateKey: utcDateKey(depUtc),
       distanceKm: Math.round(distanceKm(depAirport, arrAirport)),
     }).returning({ id: manualFlights.id })
     const [relation] = await db.insert(userFlights).values({
@@ -109,9 +117,15 @@ export function registerHistoricalRoutes(app: FastifyInstance): void {
       manualFlightId: manual!.id,
       role: 'logged',
       loggedState: 'flown',
-      source: 'manual',
+      source: 'import',
       note: `Imported from ${String(candidate.source)} ${String(candidate.datasetKey)} (historical dataset).`,
     }).returning({ id: userFlights.id })
     return { userFlightId: relation!.id, manualFlightId: manual!.id }
   })
+}
+
+function parseHistoricalUtc(value: string): Date | null {
+  const normalized = value.trim().replace(' ', 'T')
+  const date = new Date(/[zZ]|[+-]\d\d:\d\d$/.test(normalized) ? normalized : `${normalized}Z`)
+  return Number.isFinite(date.getTime()) ? date : null
 }

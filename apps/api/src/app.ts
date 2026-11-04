@@ -80,6 +80,12 @@ export async function buildServer() {
   registerHistoricalRoutes(app)
   const { registerReferenceRoutes } = await import('./routes/reference.js')
   registerReferenceRoutes(app)
+  const { registerImportRoutes } = await import('./routes/import.js')
+  registerImportRoutes(app)
+  const { registerTravelRiskRoutes } = await import('./routes/travel-risk.js')
+  registerTravelRiskRoutes(app)
+  const { registerFlightDiscoveryRoutes } = await import('./routes/flight-discovery.js')
+  registerFlightDiscoveryRoutes(app)
 
   app.get('/api/health', async () => {
     const providersSnapshot = await providers.statusSnapshot()

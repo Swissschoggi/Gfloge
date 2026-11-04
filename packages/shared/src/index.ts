@@ -49,14 +49,20 @@ export const normalizeFlightNumber = (raw: string): string =>
     .replace(/^([A-Z0-9]{2})(\d)/, '$1 $2') // "LH371" -> "LH 371"
 
 export const manualFlightSchema = z.object({
-  airlineIcao: z.string().trim().toUpperCase().optional(),
-  flightNumber: z.string().trim().min(2).max(7).transform(normalizeFlightNumber),
-  departureIata: z.string().trim().toUpperCase().length(3),
-  arrivalIata: z.string().trim().toUpperCase().length(3),
+  airlineIata: z.string().trim().toUpperCase().length(2).optional(),
+  airlineIcao: z.string().trim().toUpperCase().min(2).max(3).optional(),
+  flightNumber: z.string().trim().max(16).transform((value) => value ? normalizeFlightNumber(value) : undefined).optional(),
+  departureIata: z.string().trim().toUpperCase().length(3).optional(),
+  departureIcao: z.string().trim().toUpperCase().length(4).optional(),
+  arrivalIata: z.string().trim().toUpperCase().length(3).optional(),
+  arrivalIcao: z.string().trim().toUpperCase().length(4).optional(),
   /** Local wall-clock times at the respective airport, ISO local form (YYYY-MM-DDTHH:mm). */
   departureLocal: z.string().regex(/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}$/),
   arrivalLocal: z.string().regex(/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}$/),
   aircraftIcaoType: z.string().trim().toUpperCase().optional(),
+}).superRefine((input, context) => {
+  if (!input.departureIata && !input.departureIcao) context.addIssue({ code: z.ZodIssueCode.custom, path: ['departureIata'], message: 'Choose a departure airport.' })
+  if (!input.arrivalIata && !input.arrivalIcao) context.addIssue({ code: z.ZodIssueCode.custom, path: ['arrivalIata'], message: 'Choose an arrival airport.' })
 })
 export type ManualFlightInput = z.infer<typeof manualFlightSchema>
 
@@ -101,6 +107,28 @@ export const flightLookupSchema = z.object({
 })
 export type FlightLookupInput = z.infer<typeof flightLookupSchema>
 
+const calendarDate = z.string().regex(/^\d{4}-\d{2}-\d{2}$/).refine((value) => {
+  const date = new Date(`${value}T00:00:00.000Z`)
+  return Number.isFinite(date.getTime()) && date.toISOString().slice(0, 10) === value
+}, 'Choose a valid travel date.')
+
+/** Search needs a date and at least one remembered flight/route detail. */
+export const flightSearchSchema = z.object({
+  date: calendarDate,
+  code: z.string().trim().max(16).transform((value) => value.toUpperCase().replace(/[\s-]+/g, '')).optional().default(''),
+  departure: z.string().trim().max(160).optional().default(''),
+  arrival: z.string().trim().max(160).optional().default(''),
+  airline: z.string().trim().max(160).optional().default(''),
+  departureTime: z.string().regex(/^([01]\d|2[0-3]):[0-5]\d$/).optional(),
+  timeWindowMinutes: z.coerce.number().int().min(15).max(360).default(90),
+  registration: z.string().trim().max(16).transform((value) => value.toUpperCase().replace(/[\s-]+/g, '')).optional().default(''),
+}).superRefine((value, context) => {
+  if (!value.code && !value.departure && !value.arrival && !value.airline && !value.registration) {
+    context.addIssue({ code: z.ZodIssueCode.custom, path: ['code'], message: 'Add a flight number, airport, airline or aircraft registration to search.' })
+  }
+})
+export type FlightSearchInput = z.infer<typeof flightSearchSchema>
+
 // ===== API payload shapes (read side) =====
 
 export type AirportInfo = {
@@ -110,12 +138,72 @@ export type AirportInfo = {
   name: string
   city: string
   country: string
-  tz: string
+  tz: string | null
   lat: number
   lon: number
 }
 
+export type AirportSearchResult = {
+  id: string
+  iata: string | null
+  icao: string | null
+  name: string
+  city: string | null
+  country: string | null
+  tz: string | null
+  lat: number | null
+  lon: number | null
+  source: string
+  creatable: boolean
+}
+
 export type AirlineInfo = { id: string; iata: string | null; icao: string | null; name: string; country: string | null }
+export type AirlineSearchResult = AirlineInfo & { callsign: string | null; source: string }
+export type AircraftTypeSearchResult = { id: string; iataType: string | null; icaoType: string | null; manufacturer: string | null; name: string; family: string | null; source: string }
+
+export type FlightSearchSource = {
+  id: string
+  name: string
+  kind: 'schedule' | 'historical' | 'demo'
+  status: 'searched' | 'no_results' | 'not_configured' | 'not_applicable' | 'unavailable' | 'error' | 'outside_window' | 'unsupported' | 'rate_limited'
+  message: string
+  attribution: string
+}
+
+export type FlightSearchCandidate = {
+  id: string
+  token: string | null
+  flightId: string | null
+  kind: 'schedule' | 'historical' | 'demo'
+  evidence: 'verified_schedule' | 'historical_observation' | 'demo_sample' | 'incomplete'
+  flightCode: string | null
+  airlineCode: string | null
+  departureCode: string | null
+  arrivalCode: string | null
+  airline: AirlineSearchResult | null
+  departure: AirportSearchResult | null
+  arrival: AirportSearchResult | null
+  departureTimeUtc: string | null
+  arrivalTimeUtc: string | null
+  aircraftRegistration: string | null
+  aircraftType: string | null
+  status: FlightStatus | null
+  depTerminal: string | null
+  depGate: string | null
+  arrTerminal: string | null
+  arrGate: string | null
+  arrBaggage: string | null
+  source: { id: string; name: string; attribution: string; license: string | null }
+  additionalSources: Array<{ id: string; name: string; attribution: string; license: string | null }>
+  missingFields: Array<'flightNumber' | 'airline' | 'departure' | 'arrival' | 'departureTimezone' | 'departureTime' | 'arrivalTime' | 'aircraftRegistration' | 'aircraftType'>
+}
+
+export type FlightSearchResponse = {
+  query: FlightSearchInput
+  outcome: 'matches' | 'no_sources' | 'sources_unavailable' | 'no_matches' | 'partial'
+  sources: FlightSearchSource[]
+  candidates: FlightSearchCandidate[]
+}
 
 export type AircraftInfo = { registration: string | null; icaoType: string | null; typeName: string | null; manufacturer: string | null }
 
@@ -137,6 +225,24 @@ export type FlightRead = {
   arrTerminal: string | null
   arrGate: string | null
   arrBaggage: string | null
+  scheduledGateDeparture: string | null
+  actualGateDeparture: string | null
+  scheduledTakeoff: string | null
+  actualTakeoff: string | null
+  scheduledLanding: string | null
+  actualLanding: string | null
+  scheduledGateArrival: string | null
+  actualGateArrival: string | null
+  cancelled: boolean
+  divertedTo: string | null
+  seat: string | null
+  seatType: string | null
+  bookingReference: string | null
+  flightReason: string | null
+  sourceType: string | null
+  sourceName: string | null
+  sourceMetadata: Record<string, string> | null
+  fieldSources: Record<string, unknown> | null
   aircraft: AircraftInfo | null
   distanceKm: number | null
   /** Provider attribution and demo marking come from providerRefs.demo. */
@@ -259,4 +365,5 @@ export type ProviderStatus = {
   status: string
   attribution: string
   credentialHint: string | null
+  implemented?: boolean
 }

@@ -7,6 +7,7 @@ import {
   airports,
   flights,
   manualFlights,
+  userFlights,
 } from '@gfloge/db'
 import type { Db } from '@gfloge/db'
 import {
@@ -26,7 +27,7 @@ function airportToInfo(row: typeof airports.$inferSelect): AirportInfo {
     name: row.name,
     city: row.city,
     country: row.country,
-    tz: row.tz,
+    tz: row.tz ?? null,
     lat: row.lat,
     lon: row.lon,
   }
@@ -51,6 +52,12 @@ function aircraftInfo(registration: string | null, typeRow: typeof aircraftTypes
 function isDemoFlight(providerRefs: unknown): boolean {
   const refs = (providerRefs ?? {}) as Record<string, unknown>
   return DEMO_PROVIDER_ID in refs
+}
+
+function providerIdFrom(providerRefs: unknown): string | null {
+  const refs = (providerRefs ?? {}) as Record<string, unknown>
+  const id = Object.keys(refs)[0]
+  return id ?? null
 }
 
 export async function flightsById(db: Db, ids: string[]): Promise<Map<string, FlightRead>> {
@@ -91,9 +98,27 @@ export async function flightsById(db: Db, ids: string[]): Promise<Map<string, Fl
       arrTerminal: f.arrTerminal,
       arrGate: f.arrGate,
       arrBaggage: f.arrBaggage,
+      scheduledGateDeparture: null,
+      actualGateDeparture: null,
+      scheduledTakeoff: null,
+      actualTakeoff: null,
+      scheduledLanding: null,
+      actualLanding: null,
+      scheduledGateArrival: null,
+      actualGateArrival: null,
+      cancelled: false,
+      divertedTo: null, // resolved from divertedToAirportId when available
+      seat: null,
+      seatType: null,
+      bookingReference: null,
+      flightReason: null,
+      sourceType: null,
+      sourceName: null,
+      sourceMetadata: null,
+      fieldSources: null,
       aircraft: aircraftInfo(f.aircraftRegistration, row.type),
       distanceKm: f.distanceKm,
-      providerId: isDemoFlight(f.providerRefs) ? DEMO_PROVIDER_ID : null,
+      providerId: providerIdFrom(f.providerRefs),
       isDemo: isDemoFlight(f.providerRefs),
       isManual: false,
     })
@@ -107,12 +132,13 @@ export async function manualFlightsById(db: Db, userId: string, ids: string[]): 
   const arr = aliasedTable(airports, 'arr_airport')
   // Strict isolation: manual records are fetched for their owner only.
   const rows = await db
-    .select({ m: manualFlights, dep, arr, airline: airlines, type: aircraftTypes })
+    .select({ m: manualFlights, dep, arr, airline: airlines, type: aircraftTypes, relationNote: userFlights.note, relationSource: userFlights.source })
     .from(manualFlights)
     .innerJoin(dep, eq(dep.id, manualFlights.departureAirportId))
     .innerJoin(arr, eq(arr.id, manualFlights.arrivalAirportId))
     .leftJoin(airlines, eq(airlines.id, manualFlights.airlineId))
     .leftJoin(aircraftTypes, eq(aircraftTypes.id, manualFlights.aircraftTypeId))
+    .leftJoin(userFlights, and(eq(userFlights.manualFlightId, manualFlights.id), eq(userFlights.userId, userId)))
     .where(and(inArray(manualFlights.id, ids), eq(manualFlights.userId, userId)))
 
   const map = new Map<string, FlightRead>()
@@ -126,17 +152,35 @@ export async function manualFlightsById(db: Db, userId: string, ids: string[]): 
       arrival: airportToInfo(row.arr),
       scheduledDeparture: m.scheduledDeparture.toISOString(),
       scheduledArrival: (m.scheduledArrival ?? m.scheduledDeparture).toISOString(),
-      actualDeparture: null,
-      actualArrival: null,
+      actualDeparture: m.actualDeparture?.toISOString() ?? null,
+      actualArrival: m.actualArrival?.toISOString() ?? null,
+      scheduledGateDeparture: m.scheduledGateDeparture?.toISOString() ?? null,
+      actualGateDeparture: m.actualGateDeparture?.toISOString() ?? null,
+      scheduledTakeoff: m.scheduledTakeoff?.toISOString() ?? null,
+      actualTakeoff: m.actualTakeoff?.toISOString() ?? null,
+      scheduledLanding: m.scheduledLanding?.toISOString() ?? null,
+      actualLanding: m.actualLanding?.toISOString() ?? null,
+      scheduledGateArrival: m.scheduledGateArrival?.toISOString() ?? null,
+      actualGateArrival: m.actualGateArrival?.toISOString() ?? null,
+      cancelled: m.cancelled ?? false,
+      divertedTo: null, // resolved from divertedToAirportId when available
+      seat: m.seat ?? null,
+      seatType: m.seatType ?? null,
+      bookingReference: m.bookingReference ?? null,
+      flightReason: m.flightReason ?? null,
+      sourceType: m.sourceType ?? null,
+      sourceName: m.sourceName ?? null,
+      sourceMetadata: (m.sourceMetadata as Record<string, string>) ?? null,
+      fieldSources: (m.fieldSources as Record<string, unknown>) ?? null,
       status: 'unknown',
-      depTerminal: null,
-      depGate: null,
-      arrTerminal: null,
-      arrGate: null,
+      depTerminal: m.depTerminal ?? null,
+      depGate: m.depGate ?? null,
+      arrTerminal: m.arrTerminal ?? null,
+      arrGate: m.arrGate ?? null,
       arrBaggage: null,
-      aircraft: aircraftInfo(null, row.type),
+      aircraft: aircraftInfo(m.aircraftRegistration, row.type),
       distanceKm: m.distanceKm,
-      providerId: null,
+      providerId: row.relationSource === 'import' && row.relationNote?.startsWith('Historical observation from ') ? 'mrairspace' : null,
       isDemo: false,
       isManual: true,
     })

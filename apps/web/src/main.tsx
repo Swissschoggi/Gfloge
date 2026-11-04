@@ -20,6 +20,7 @@ import './styles/pages.css'
 import './styles/status.css'
 import './styles/data.css'
 import './styles/polish.css'
+import './styles/atlas.css'
 
 const queryClient = new QueryClient({
   defaultOptions: {

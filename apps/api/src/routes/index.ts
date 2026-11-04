@@ -3,8 +3,6 @@
 import type { FastifyInstance, FastifyRequest } from 'fastify'
 import { and, desc, eq, sql } from 'drizzle-orm'
 import {
-  aircraftTypes,
-  airlines,
   airports,
   flights,
   manualFlights,
@@ -16,7 +14,7 @@ import type { Db } from '@gfloge/db'
 import {
   addUserFlightSchema,
   distanceKm,
-  flightLookupSchema,
+  flightSearchSchema,
   localToUtc,
   manualFlightSchema,
   greatCircleInterp,
@@ -30,14 +28,18 @@ import type {
   BoardPayload,
   DataCondition,
   FlightRead,
+  FlightSearchResponse,
   ManualFlightInput,
   PositionData,
   RoutePoint,
   StatsPayload,
   UserFlightItem,
 } from '@gfloge/shared'
-import { airportToInfo, flightsById, manualFlightsById } from '../flights-read.js'
+import { flightsById, manualFlightsById } from '../flights-read.js'
 import { encryptConfigJson, maskSecret } from '../crypto.js'
+import { searchFlights } from '../flight-search/service.js'
+import { CandidateResolveError, resolveCandidate } from '../flight-search/resolve.js'
+import { resolveCanonicalAirline, resolveCanonicalAirport, resolveCanonicalAircraftType, searchAirlines, searchAirports } from '../reference/search.js'
 
 type Authed = NonNullable<FastifyRequest['user']>
 
@@ -169,43 +171,54 @@ export function registerDomainRoutes(app: FastifyInstance): void {
 
   // ----- Airports / airlines (picker data) -----
 
-  app.get('/api/v1/airports', async (req) => {
-    const q = String((req.query as Record<string,string|undefined>)['q'] ?? '').trim()
-    const rows = await db
-      .select()
-      .from(airports)
-      .where(q ? sql`(${airports.name} ILIKE ${`%${q}%`} OR ${airports.city} ILIKE ${`%${q}%`} OR ${airports.iata} ILIKE ${`${q}%`})` : sql`true`)
-      .orderBy(airports.iata)
-      .limit(30)
-    return { results: rows.map(airportToInfo) }
+  app.get('/api/v1/airports', { config: { rateLimit: { max: 90, timeWindow: 60_000 } } }, async (req) => {
+    const q = String((req.query as Record<string, string | undefined>)['q'] ?? '').trim()
+    return { results: await searchAirports(db, q, 30) }
   })
 
-  app.get('/api/v1/airlines', async () => {
-    const rows = await db.select().from(airlines).orderBy(airlines.icao).limit(50)
-    return { results: rows.map((r) => ({ id: r.id, iata: r.iata, icao: r.icao, name: r.name, country: r.country })) }
+  app.get('/api/v1/airlines', { config: { rateLimit: { max: 90, timeWindow: 60_000 } } }, async (req) => {
+    const q = String((req.query as Record<string, string | undefined>)['q'] ?? '').trim()
+    return { results: await searchAirlines(db, q, 100) }
   })
 
-  // ----- Flight lookup (provider backed; only demo flights exist for now) -----
+  // ----- Outcome-aware flight search -----
 
-  app.get('/api/v1/flights/lookup', async (req, reply) => {
-    const parsed = flightLookupSchema.safeParse({
-      code: String((req.query as Record<string,string|undefined>)['code'] ?? ''),
-      date: String((req.query as Record<string,string|unknown>)['date'] ?? ''),
+  app.get('/api/v1/flights/lookup', { config: { rateLimit: { max: 20, timeWindow: 60_000 } } }, async (req, reply) => {
+    const query = req.query as Record<string, string | undefined>
+    const parsed = flightSearchSchema.safeParse({
+      code: query['code'],
+      date: query['date'],
+      departure: query['departure'],
+      arrival: query['arrival'],
+      airline: query['airline'],
+      departureTime: query['departureTime'],
+      timeWindowMinutes: query['timeWindowMinutes'],
+      registration: query['registration'],
     })
     if (!parsed.success) {
-      return reply.code(400).send({ error: { code: 'validation', message: 'Enter a flight number (2 to 7 characters) and a date.' } })
+      return reply.code(400).send({ error: { code: 'validation', message: parsed.error.issues[0]?.message ?? 'Enter a date and at least one flight detail.' } })
     }
-    const { code, date } = parsed.data
-    const rows = await db
-      .select({ id: flights.id })
-      .from(flights)
-      .where(and(eq(flights.flightCode, code), eq(flights.depDateKey, date)))
-      .limit(10)
-    const items = await flightsById(db, rows.map((r) => r.id))
-    return {
-      query: { code, date },
-      results: [...items.values()],
-      engine: { provider: 'demo', isDemo: true },
+    const result = await searchFlights(db, app.providers, parsed.data, requireUser(req).id, app.config.secret)
+    const ids = result.candidates.map((candidate) => candidate.flightId).filter((id): id is string => !!id)
+    const stored = await flightsById(db, ids)
+    const response: FlightSearchResponse & { results: FlightRead[]; engine: { provider: string; isDemo: boolean } } = {
+      ...result,
+      results: ids.map((id) => stored.get(id)).filter((flight): flight is FlightRead => !!flight),
+      engine: { provider: result.sources.find((source) => source.status === 'searched')?.id ?? 'none', isDemo: result.candidates.some((candidate) => candidate.kind === 'demo') },
+    }
+    return response
+  })
+
+  app.post('/api/v1/flights/resolve', { config: { rateLimit: { max: 30, timeWindow: 60_000 } } }, async (req, reply) => {
+    const token = (req.body as { token?: unknown } | null)?.token
+    if (typeof token !== 'string' || token.length > 16_000) {
+      return reply.code(400).send({ error: { code: 'validation', message: 'Choose a current search result first.' } })
+    }
+    try {
+      return await resolveCandidate(db, app.config.secret, requireUser(req).id, token)
+    } catch (cause) {
+      if (cause instanceof CandidateResolveError) return reply.code(cause.statusCode).send({ error: { code: cause.code, message: cause.message } })
+      throw cause
     }
   })
 
@@ -217,10 +230,13 @@ export function registerDomainRoutes(app: FastifyInstance): void {
       return reply.code(400).send({ error: { code: 'validation', message: parsed.error.issues[0]?.message ?? 'Invalid input' } })
     }
     const input: ManualFlightInput = parsed.data
-    const depAirport = (await db.select().from(airports).where(eq(airports.iata, input.departureIata)).limit(1))[0]
-    const arrAirport = (await db.select().from(airports).where(eq(airports.iata, input.arrivalIata)).limit(1))[0]
+    const depAirport = await resolveCanonicalAirport(db, input.departureIata ?? input.departureIcao ?? '')
+    const arrAirport = await resolveCanonicalAirport(db, input.arrivalIata ?? input.arrivalIcao ?? '')
     if (!depAirport || !arrAirport) {
       return reply.code(400).send({ error: { code: 'validation', message: 'Choose both airports from the search results.' } })
+    }
+    if (!depAirport.tz || !arrAirport.tz) {
+      return reply.code(400).send({ error: { code: 'validation', message: 'Departure or arrival airport has no known timezone; cannot resolve local times.' } })
     }
     const depUtc = localToUtc(input.departureLocal, depAirport.tz)
     const arrUtc = localToUtc(input.arrivalLocal, arrAirport.tz)
@@ -230,20 +246,15 @@ export function registerDomainRoutes(app: FastifyInstance): void {
         .send({ error: { code: 'validation', message: 'Arrival must be after departure. Local times and timezones were applied.' } })
     }
     let airlineId: string | null = null
-    if (input.airlineIcao) {
-      airlineId = (await db.select({ id: airlines.id }).from(airlines).where(eq(airlines.icao, input.airlineIcao)).limit(1))[0]?.id ?? null
-    }
+    if (input.airlineIcao || input.airlineIata) airlineId = (await resolveCanonicalAirline(db, input.airlineIcao ?? input.airlineIata ?? ''))?.id ?? null
     let aircraftTypeId: string | null = null
-    if (input.aircraftIcaoType) {
-      aircraftTypeId =
-        (await db.select({ id: aircraftTypes.id }).from(aircraftTypes).where(eq(aircraftTypes.icaoType, input.aircraftIcaoType)).limit(1))[0]?.id ?? null
-    }
+    if (input.aircraftIcaoType) aircraftTypeId = (await resolveCanonicalAircraftType(db, input.aircraftIcaoType))?.id ?? null
     const [created] = await db
       .insert(manualFlights)
       .values({
         userId: requireUser(req).id,
         airlineId,
-        flightNumber: input.flightNumber,
+        flightNumber: input.flightNumber ?? null,
         departureAirportId: depAirport.id,
         arrivalAirportId: arrAirport.id,
         scheduledDeparture: depUtc,
@@ -255,6 +266,82 @@ export function registerDomainRoutes(app: FastifyInstance): void {
       .returning({ id: manualFlights.id })
     const read = await manualFlightsById(db, requireUser(req).id, [created!.id])
     return { flight: read.get(created!.id)!, manualFlightId: created!.id }
+  })
+
+  // ----- Manual flight update (self entered, owner only) -----
+  app.patch('/api/v1/manual-flights/:id', async (req, reply) => {
+    const userId = requireUser(req).id
+    const id = String((req.params as Record<string, string>).id)
+    const existing = await db.select().from(manualFlights).where(and(eq(manualFlights.id, id), eq(manualFlights.userId, userId))).limit(1)
+    if (!existing[0]) return reply.code(404).send({ error: { code: 'not_found', message: 'No manual record of yours matches.' } })
+    const body = (req.body ?? {}) as Record<string, unknown>
+    const update: Record<string, unknown> = { updatedAt: new Date() }
+    const existingFieldSources = (existing[0].fieldSources as Record<string, unknown> | null) ?? {}
+    const fieldSources: Record<string, unknown> = { ...existingFieldSources }
+    const nowIso = new Date().toISOString()
+    const markManual = (field: string) => { fieldSources[field] = { source: 'manual', sourceName: 'user', at: nowIso, manual: true } }
+    if (typeof body['flightNumber'] === 'string') update.flightNumber = body['flightNumber'].trim() || null
+    if (typeof body['airlineIata'] === 'string' || typeof body['airlineIcao'] === 'string') {
+      const code = String(body['airlineIcao'] ?? body['airlineIata'] ?? '')
+      const resolved = await resolveCanonicalAirline(db, code)
+      update.airlineId = resolved?.id ?? null
+    }
+    if (typeof body['departureIata'] === 'string' || typeof body['departureIcao'] === 'string') {
+      const code = String(body['departureIcao'] ?? body['departureIata'] ?? '')
+      const resolved = await resolveCanonicalAirport(db, code)
+      if (resolved) update.departureAirportId = resolved.id
+    }
+    if (typeof body['arrivalIata'] === 'string' || typeof body['arrivalIcao'] === 'string') {
+      const code = String(body['arrivalIcao'] ?? body['arrivalIata'] ?? '')
+      const resolved = await resolveCanonicalAirport(db, code)
+      if (resolved) update.arrivalAirportId = resolved.id
+    }
+    if (typeof body['departureLocal'] === 'string' && body['departureLocal']) {
+      const depAirport = await db.select().from(airports).where(eq(airports.id, (update.departureAirportId ?? existing[0].departureAirportId) as string)).limit(1)
+      if (depAirport[0]?.tz) update.scheduledDeparture = localToUtc(body['departureLocal'] as string, depAirport[0].tz)
+    }
+    if (typeof body['arrivalLocal'] === 'string' && body['arrivalLocal']) {
+      const arrAirport = await db.select().from(airports).where(eq(airports.id, (update.arrivalAirportId ?? existing[0].arrivalAirportId) as string)).limit(1)
+      if (arrAirport[0]?.tz) update.scheduledArrival = localToUtc(body['arrivalLocal'] as string, arrAirport[0].tz)
+    }
+    if (typeof body['aircraftIcaoType'] === 'string') {
+      const resolved = await resolveCanonicalAircraftType(db, body['aircraftIcaoType'] as string)
+      update.aircraftTypeId = resolved?.id ?? null
+    }
+    if (typeof body['aircraftRegistration'] === 'string') update.aircraftRegistration = (body['aircraftRegistration'] as string).trim() || null
+    if (typeof body['seat'] === 'string') update.seat = (body['seat'] as string).trim() || null
+    if (typeof body['cabin'] === 'string') update.cabin = body['cabin']
+    if (typeof body['note'] === 'string') update.note = (body['note'] as string).trim() || null
+    if (typeof body['bookingReference'] === 'string') update.bookingReference = (body['bookingReference'] as string).trim() || null
+    if (typeof body['flightReason'] === 'string') update.flightReason = (body['flightReason'] as string).trim() || null
+    if (typeof body['depTerminal'] === 'string') update.depTerminal = (body['depTerminal'] as string).trim() || null
+    if (typeof body['depGate'] === 'string') update.depGate = (body['depGate'] as string).trim() || null
+    if (typeof body['arrTerminal'] === 'string') update.arrTerminal = (body['arrTerminal'] as string).trim() || null
+    if (typeof body['arrGate'] === 'string') update.arrGate = (body['arrGate'] as string).trim() || null
+    if (typeof body['seatType'] === 'string') update.seatType = (body['seatType'] as string).trim() || null
+    if (typeof body['rating'] === 'number' && body['rating'] >= 1 && body['rating'] <= 5) update.rating = body['rating']
+    if (body['rating'] === null) update.rating = null
+    if (typeof body['cancelled'] === 'boolean') update.cancelled = body['cancelled']
+    if (typeof body['divertedTo'] === 'string') {
+      const resolved = await resolveCanonicalAirport(db, body['divertedTo'] as string)
+      update.divertedToAirportId = resolved?.id ?? null
+    }
+    const tsFields = ['scheduledGateDeparture', 'actualGateDeparture', 'scheduledTakeoff', 'actualTakeoff', 'scheduledLanding', 'actualLanding', 'scheduledGateArrival', 'actualGateArrival'] as const
+    for (const field of tsFields) {
+      const v = body[field]
+      if (typeof v === 'string' && v) {
+        const d = new Date(v)
+        if (!Number.isNaN(d.getTime())) update[field] = d
+      } else if (v === null) {
+        update[field] = null
+      }
+    }
+    const knownFields = new Set(['flightNumber','airlineIata','airlineIcao','departureIata','departureIcao','arrivalIata','arrivalIcao','departureLocal','arrivalLocal','aircraftIcaoType','aircraftRegistration','seat','cabin','note','bookingReference','flightReason','depTerminal','depGate','arrTerminal','arrGate','arrBaggage','seatType','rating','cancelled','divertedTo','scheduledGateDeparture','actualGateDeparture','scheduledTakeoff','actualTakeoff','scheduledLanding','actualLanding','scheduledGateArrival','actualGateArrival'])
+    for (const key of Object.keys(body)) if (knownFields.has(key)) markManual(key)
+    update.fieldSources = fieldSources
+    await db.update(manualFlights).set(update).where(eq(manualFlights.id, id))
+    const read = await manualFlightsById(db, userId, [id])
+    return { flight: read.get(id)! }
   })
 
   // ----- User flight relations (follow, log, planned) -----
@@ -433,7 +520,37 @@ export function registerDomainRoutes(app: FastifyInstance): void {
     if (flight.isManual) {
       return reply.code(404).send({ error: { code: 'not_supported', message: 'Self-entered flights have no tracking data until a provider adds it.' } })
     }
+    const creds = await app.providers.credentials('adsb.lol')
+    const apiKey = creds?.apiKey ?? creds?.secret ?? null
+    const { searchAdsbLolByCallsign } = await import('../providers/adsblol.js')
+    const result = await searchAdsbLolByCallsign(flight.flightCode, apiKey)
+    if (result.state === 'searched' && result.aircraft && typeof result.aircraft.lat === 'number' && typeof result.aircraft.lon === 'number') {
+      const ac = result.aircraft
+      const now = new Date()
+      const alt = typeof ac.alt_baro === 'number' ? ac.alt_baro : null
+      return {
+        sourceLabel: 'adsb.lol live ADS-B',
+        isDemo: false,
+        condition: 'fresh' as const,
+        fetchedAt: now.toISOString(),
+        points: [{ lat: ac.lat!, lon: ac.lon!, altFt: alt, ts: now.toISOString() }],
+        aircraft: flight.aircraft,
+      }
+    }
     return demoPositions(flight, new Date())
+  })
+
+  // ----- Diagnostics -----
+  app.get('/api/v1/flights/:id/diagnostics', async (req, reply) => {
+    const rawId = String((req.params as Record<string, string>).id)
+    const isManual = rawId.startsWith('manual:')
+    const lookupId = isManual ? rawId.slice(7) : rawId
+    const flight = isManual
+      ? (await manualFlightsById(db, requireUser(req).id, [lookupId])).get(lookupId)
+      : (await flightsById(db, [lookupId])).get(lookupId)
+    if (!flight) return reply.code(404).send({ error: { code: 'not_found', message: 'No flight matches that id.' } })
+    const { diagnoseFlight } = await import('../diagnostics.js')
+    return { diagnostics: diagnoseFlight(flight) }
   })
 
   // ----- Alerts -----
@@ -516,11 +633,11 @@ export function registerDomainRoutes(app: FastifyInstance): void {
         csvCell(it.flight.flightCode),
         csvCell(it.flight.airline?.name ?? ''),
         it.flight.departure.iata ?? '',
-        toLocalIso(new Date(it.flight.scheduledDeparture), it.flight.departure.tz),
-        it.flight.departure.tz,
+        toLocalIso(new Date(it.flight.scheduledDeparture), it.flight.departure.tz ?? 'UTC'),
+        it.flight.departure.tz ?? '',
         it.flight.arrival.iata ?? '',
-        toLocalIso(new Date(it.flight.scheduledArrival), it.flight.arrival.tz),
-        it.flight.arrival.tz,
+        toLocalIso(new Date(it.flight.scheduledArrival), it.flight.arrival.tz ?? 'UTC'),
+        it.flight.arrival.tz ?? '',
         it.flight.aircraft?.registration ?? '',
         it.flight.aircraft?.icaoType ?? '',
         it.cabin,
@@ -551,22 +668,21 @@ export function registerDomainRoutes(app: FastifyInstance): void {
     if (!known.some((p) => p.id === providerId)) {
       return reply.code(404).send({ error: { code: 'not_found', message: 'Unknown provider id.' } })
     }
-    await db
-      .insert(providerCredentials)
-      .values({
+    const existing = await db.select({ id: providerCredentials.id }).from(providerCredentials).where(eq(providerCredentials.providerId, providerId)).limit(1)
+    if (existing[0]) {
+      await db.update(providerCredentials).set({
+        configEncrypted: encryptConfigJson(app.config.secret, { secret: value }),
+        maskedHint: maskSecret(value),
+        updatedAt: new Date(),
+      }).where(eq(providerCredentials.providerId, providerId))
+    } else {
+      await db.insert(providerCredentials).values({
         providerId,
         configEncrypted: encryptConfigJson(app.config.secret, { secret: value }),
         maskedHint: maskSecret(value),
         source: 'instance',
       })
-      .onConflictDoUpdate({
-        target: providerCredentials.providerId,
-        set: {
-          configEncrypted: encryptConfigJson(app.config.secret, { secret: value }),
-          maskedHint: maskSecret(value),
-          updatedAt: new Date(),
-        },
-      })
+    }
     return { ok: true, hint: maskSecret(value) }
   })
 

@@ -2,32 +2,41 @@ import { useEffect, useState, type FormEvent } from 'react'
 import { Link, useSearchParams } from 'react-router'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { api } from '../api/client'
-import type { ProviderStatus, UserPreferences } from '@gfloge/shared'
+import type { UserPreferences } from '@gfloge/shared'
 import { useMe } from '../components/RequireAuth'
+import { ProviderSettings } from '../components/ProviderSettings'
 
 const TABS = [
   { key: 'profile', label: 'Profile' },
   { key: 'trips', label: 'Trips' },
   { key: 'users', label: 'Users' },
-  { key: 'providers', label: 'Providers' },
+  { key: 'providers', label: 'Data sources' },
   { key: 'instance', label: 'Instance' },
   { key: 'historical', label: 'Historical data' },
   { key: 'reference', label: 'Reference data' },
 ] as const
 
 export function SettingsPage() {
-  const [params, setParams] = useSearchParams()
-  const active = params.get('tab') ?? 'profile'
+
+  const [params] = useSearchParams()
+  const requested = params.get('tab') ?? 'profile'
   const me = useMe()
   const isAdmin = me.data?.me?.role === 'admin'
   const visible = TABS.filter((tab) => ['profile', 'trips', 'historical', 'reference'].includes(tab.key) || isAdmin)
+  const active = visible.some((tab) => tab.key === requested) ? requested : 'profile'
   return (
-    <div className="page">
-      <h1 style={{ fontSize: 'var(--step-2)' }}>Settings</h1>
-      <nav className="settings-tabs" aria-label="Settings sections">
-        {visible.map((tab) => <button key={tab.key} type="button" className={active===tab.key?'settings-tab settings-tab--active':'settings-tab'} role="tab" aria-selected={active===tab.key} aria-controls={`settings-panel-${tab.key}`} id={`settings-tab-${tab.key}`} onClick={()=>setParams({tab:tab.key})}>{tab.label}</button>)}
+    <div className="page settings-page">
+
+      <header className="settings-heading">
+        <div><p className="eyebrow">Account / instance controls</p><h1>Settings</h1></div>
+        <p>Personal display preferences and instance administration.</p>
+      </header>
+      <div className="settings-workspace">
+      <nav className="settings-index" aria-label="Settings sections">
+        {visible.map((tab) => <Link key={tab.key} to={`?tab=${tab.key}`} aria-current={active === tab.key ? 'page' : undefined}><span>{tab.label}</span><span aria-hidden="true">→</span></Link>)}
       </nav>
-      <div role="tabpanel" id={`settings-panel-${active}`} aria-labelledby={`settings-tab-${active}`}>
+      <section className="settings-content" aria-labelledby="settings-section-title">
+        <header><h2 id="settings-section-title">{TABS.find((tab) => tab.key === active)?.label ?? 'Settings section'}</h2></header>
       {active === 'profile' && <ProfileSettings />}
       {active === 'trips' && <div className="data-panel"><h2 className="data-panel__title">Trips</h2><p>Your itineraries are stored separately from your logbook flights.</p><Link className="btn" to="/trips">Open trips</Link></div>}
       {active === 'users' && isAdmin && <UserSettings />}
@@ -35,6 +44,7 @@ export function SettingsPage() {
       {active === 'instance' && isAdmin && <InstanceSettings />}
       {active === 'historical' && <HistoricalData />}
       {active === 'reference' && <ReferenceData />}
+      </section>
       </div>
     </div>
   )
@@ -72,7 +82,7 @@ function ProfileSettings() {
       <div className="field"><label htmlFor="pref-email">Email</label><input id="pref-email" className="input" value={prefs.data.preferences.email} readOnly /></div>
       <div className="field"><label htmlFor="pref-units">Distance units</label><select id="pref-units" className="select" value={units} onChange={e=>setUnits(e.target.value as 'km'|'mi')}><option value="km">Kilometres</option><option value="mi">Miles</option></select></div>
       <div className="field"><label htmlFor="pref-zone">Time display</label><select id="pref-zone" className="select" value={timezoneDisplay} onChange={e=>setTimezoneDisplay(e.target.value as typeof timezoneDisplay)}><option value="airport">Airport local time</option><option value="local">My device time</option><option value="utc">UTC</option></select><p className="hint">Flight schedule values remain stored in UTC; this changes how they are displayed.</p></div>
-      <div className="field"><label htmlFor="pref-theme">Theme</label><select id="pref-theme" className="select" value={themeOverride} onChange={e=>setThemeOverride(e.target.value as typeof themeOverride)}><option value="system">Follow system</option><option value="day">Broad Daylight</option><option value="night">Night Ops</option></select></div>
+      <div className="field"><label htmlFor="pref-theme">Theme</label><select id="pref-theme" className="select" value={themeOverride} onChange={e=>setThemeOverride(e.target.value as typeof themeOverride)}><option value="system">Follow system</option><option value="day">Chart Room</option><option value="night">Deep Chart</option></select></div>
       <fieldset className="field"><legend>Notification preferences (applies when a provider reports updates)</legend>{[['delays',delays,setDelays,'Delay changes'],['gates',gates,setGates,'Gate changes'],['cancellations',cancellations,setCancellations,'Cancellations and diversions']].map(([key,value,set,label])=><label key={String(key)} className="check-row"><input type="checkbox" checked={value as boolean} onChange={e=>(set as (v:boolean)=>void)(e.target.checked)}/>{label as string}</label>)}</fieldset>
       {message&&<p role="status" className="form-note">{message}</p>}{error&&<p role="alert" className="form-error">{error}</p>}
       <button className="btn" type="submit" disabled={save.isPending}>{save.isPending?'Saving…':'Save preferences'}</button>
@@ -86,7 +96,7 @@ function DeleteAccount({onDelete,pending}:{onDelete:(pw:string)=>void;pending:bo
 
 function UserSettings(){const q=useQuery({queryKey:['admin-users'],queryFn:()=>api.get<{users:Array<{id:string;email:string;displayName:string;role:string;deactivatedAt:string|null;createdAt:string}>}>('/api/v1/admin/users')});const qc=useQueryClient();const[error,setError]=useState<string|null>(null);const[email,setEmail]=useState('');const[name,setName]=useState('');const[pw,setPw]=useState('');const[role,setRole]=useState<'user'|'admin'>('user');const create=useMutation({mutationFn:()=>api.post('/api/v1/admin/users',{email,displayName:name,password:pw,role}),onSuccess:()=>{setEmail('');setName('');setPw('');void qc.invalidateQueries({queryKey:['admin-users']})},onError:e=>setError((e as Error).message)});const update=useMutation({mutationFn:({id,deactivated}:{id:string;deactivated:boolean})=>api.patch(`/api/v1/admin/users/${id}`,{deactivated}),onSuccess:()=>void qc.invalidateQueries({queryKey:['admin-users']})});if(q.isPending)return <p>Loading users…</p>;if(q.isError)return <div role="alert" className="form-error">{(q.error as Error).message}</div>;return <div className="settings-stack"><form className="data-panel" onSubmit={e=>{e.preventDefault();setError(null);create.mutate()}}><h2 className="data-panel__title">Add user</h2><div className="field"><label htmlFor="user-name">Name</label><input id="user-name" className="input" required value={name} onChange={e=>setName(e.target.value)}/></div><div className="field"><label htmlFor="user-email">Email</label><input id="user-email" className="input" type="email" required value={email} onChange={e=>setEmail(e.target.value)}/></div><div className="field"><label htmlFor="user-pw">Temporary password</label><input id="user-pw" className="input" type="password" minLength={10} required value={pw} onChange={e=>setPw(e.target.value)}/></div><div className="field"><label htmlFor="user-role">Role</label><select id="user-role" className="select" value={role} onChange={e=>setRole(e.target.value as typeof role)}><option value="user">User</option><option value="admin">Admin</option></select></div>{error&&<p className="form-error" role="alert">{error}</p>}<button className="btn" type="submit" disabled={create.isPending}>Create user</button></form><div className="data-panel"><h2 className="data-panel__title">Instance users</h2><ul className="explore-list">{q.data.users.map(u=><li key={u.id} className="admin-user"><span><strong>{u.displayName}</strong><small>{u.email} · {u.role} · {u.deactivatedAt?'deactivated':'active'}</small></span><button className="btn-outline" type="button" onClick={()=>update.mutate({id:u.id,deactivated:!u.deactivatedAt})}>{u.deactivatedAt?'Reactivate':'Deactivate'}</button></li>)}</ul></div></div>}
 
-function ProviderSettings(){const q=useQuery({queryKey:['admin-providers'],queryFn:()=>api.get<{providers:Array<ProviderStatus & {enabled:boolean;usedFor:string[]}>}>('/api/v1/admin/providers')});const qc=useQueryClient();const[secret,setSecret]=useState<Record<string,string>>({});const[msg,setMsg]=useState<string|null>(null);const mutate=useMutation({mutationFn:({id,secret:val}:{id:string;secret:string})=>api.post(`/api/v1/admin/providers/${id}/credentials`,{secret:val}),onSuccess:()=>{setSecret({});setMsg('Credential saved, full value will not be shown again.');void qc.invalidateQueries({queryKey:['admin-providers']})}});const enable=useMutation({mutationFn:({id,enabled}:{id:string;enabled:boolean})=>api.patch(`/api/v1/admin/providers/${id}`,{enabled}),onSuccess:()=>void qc.invalidateQueries({queryKey:['admin-providers']})});const remove=useMutation({mutationFn:(id:string)=>api.delete(`/api/v1/admin/providers/${id}/credentials`),onSuccess:()=>void qc.invalidateQueries({queryKey:['admin-providers']})});const test=useMutation({mutationFn:(id:string)=>api.post<{ok:boolean;status:string;message:string}>(`/api/v1/admin/providers/${id}/test`),onSuccess:(r)=>setMsg(r.message)});if(q.isPending)return <p>Loading provider status…</p>;if(q.isError)return <div role="alert" className="form-error">{(q.error as Error).message}</div>;return <div className="settings-stack"><p className="form-note">No provider adapters are connected in this milestone. Credential controls store secrets safely; Test connection reports adapter availability and never claims connectivity when no adapter exists.</p>{msg&&<p role="status" className="form-note">{msg}</p>}{q.data.providers.map(p=><div className="data-panel" key={p.id}><div className="provider-heading"><div><h2>{p.displayName}</h2><p className="form-note">{p.capabilities.join(' · ')} · {p.status}</p></div><label className="check-row"><input type="checkbox" checked={p.enabled} onChange={e=>enable.mutate({id:p.id,enabled:e.target.checked})}/>Enabled</label></div><p className="attribution">{p.attribution} · {p.credentialHint??'No credential configured'}</p>{p.id!=='demo'&&<form className="provider-credential" onSubmit={e=>{e.preventDefault();mutate.mutate({id:p.id,secret:secret[p.id]??''})}}><div className="field"><label htmlFor={`secret-${p.id}`}>{p.credentialHint?'Replace credential':'Add credential'}</label><input id={`secret-${p.id}`} className="input" type="password" autoComplete="new-password" value={secret[p.id]??''} onChange={e=>setSecret({...secret,[p.id]:e.target.value})} placeholder="Secret is masked after save" minLength={8}/></div><button className="btn-outline" type="submit" disabled={mutate.isPending}>Save credential</button>{p.credentialHint&&<button className="quietlink" type="button" onClick={()=>remove.mutate(p.id)}>Remove</button>}<button className="btn-outline" type="button" onClick={()=>test.mutate(p.id)}>Test adapter</button></form>}</div>)}</div>}
+// ProviderSettings is now imported from components/ProviderSettings.tsx
 
 function HistoricalData() {
   const q = useQuery({

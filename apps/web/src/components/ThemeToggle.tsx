@@ -40,7 +40,7 @@ export function useTheme() {
 
 export function ThemeToggle() {
   const { theme, toggle } = useTheme()
-  const nextLabel = theme === 'day' ? 'Night Ops theme' : 'Broad Daylight theme'
+  const nextLabel = theme === 'day' ? 'Deep Chart theme' : 'Chart Room theme'
   return (
     <button type="button" className="topbar__button" onClick={toggle} aria-label={`Switch to ${nextLabel}`}>
       {theme === 'day' ? <IconMoon /> : <IconSun />}

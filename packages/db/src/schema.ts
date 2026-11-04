@@ -126,7 +126,7 @@ export const airports = pgTable(
     lat: doublePrecision('lat').notNull(),
     lon: doublePrecision('lon').notNull(),
     elevationFt: integer('elevation_ft'),
-    tz: text('tz').notNull(), // IANA
+    tz: text('tz'), // IANA; null when unknown (never assume UTC)
     source: text('source').notNull().default('seed'),
     fetchedAt: timestamp('fetched_at', { withTimezone: true }).notNull().defaultNow(),
   },
@@ -291,6 +291,8 @@ export const userFlights = pgTable(
   ]
 )
 
+export const flightRecordSource = pgEnum('flight_record_source', ['manual', 'imported', 'observed', 'scheduled'])
+
 export const manualFlights = pgTable(
   'manual_flights',
   {
@@ -308,12 +310,65 @@ export const manualFlights = pgTable(
       .references(() => airports.id),
     scheduledDeparture: timestamp('scheduled_departure', { withTimezone: true }).notNull(),
     scheduledArrival: timestamp('scheduled_arrival', { withTimezone: true }),
+    actualDeparture: timestamp('actual_departure', { withTimezone: true }),
+    actualArrival: timestamp('actual_arrival', { withTimezone: true }),
+    depTerminal: text('dep_terminal'),
+    depGate: text('dep_gate'),
+    arrTerminal: text('arr_terminal'),
+    arrGate: text('arr_gate'),
+    scheduledGateDeparture: timestamp('scheduled_gate_departure', { withTimezone: true }),
+    actualGateDeparture: timestamp('actual_gate_departure', { withTimezone: true }),
+    scheduledTakeoff: timestamp('scheduled_takeoff', { withTimezone: true }),
+    actualTakeoff: timestamp('actual_takeoff', { withTimezone: true }),
+    scheduledLanding: timestamp('scheduled_landing', { withTimezone: true }),
+    actualLanding: timestamp('actual_landing', { withTimezone: true }),
+    scheduledGateArrival: timestamp('scheduled_gate_arrival', { withTimezone: true }),
+    actualGateArrival: timestamp('actual_gate_arrival', { withTimezone: true }),
+    cancelled: boolean('cancelled').notNull().default(false),
+    divertedToAirportId: uuid('diverted_to_airport_id').references(() => airports.id),
     depDateKey: text('dep_date_key').notNull(),
     aircraftTypeId: uuid('aircraft_type_id').references(() => aircraftTypes.id),
+    aircraftRegistration: text('aircraft_registration'),
+    seat: text('seat'),
+    seatType: text('seat_type'),
+    cabin: cabinClass('cabin').notNull().default('none'),
+    bookingReference: text('booking_reference'),
+    flightReason: text('flight_reason'),
+    note: text('note'),
+    rating: smallint('rating'),
+    sourceType: flightRecordSource('source_type').notNull().default('manual'),
+    sourceName: text('source_name'),
+    sourceRecordId: text('source_record_id'),
+    sourceMetadata: jsonb('source_metadata'),
+    fieldSources: jsonb('field_sources'),
+    importBatchId: uuid('import_batch_id'),
+    importedAt: timestamp('imported_at', { withTimezone: true }),
     distanceKm: integer('distance_km'),
     createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
+    updatedAt: timestamp('updated_at', { withTimezone: true }).notNull().defaultNow(),
   },
-  (t) => [index('manual_flights_user_idx').on(t.userId)]
+  (t) => [index('manual_flights_user_idx').on(t.userId), index('manual_flights_source_idx').on(t.userId, t.sourceType, t.sourceName)]
+)
+
+export const importBatches = pgTable(
+  'import_batches',
+  {
+    id: uuid('id').primaryKey().defaultRandom(),
+    userId: uuid('user_id')
+      .notNull()
+      .references(() => users.id, { onDelete: 'cascade' }),
+    sourceFormat: text('source_format').notNull(),
+    fileName: text('file_name'),
+    totalRows: integer('total_rows').notNull().default(0),
+    importedCount: integer('imported_count').notNull().default(0),
+    enrichedCount: integer('enriched_count').notNull().default(0),
+    skippedCount: integer('skipped_count').notNull().default(0),
+    failedCount: integer('failed_count').notNull().default(0),
+    status: text('status').notNull().default('pending'),
+    createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
+    completedAt: timestamp('completed_at', { withTimezone: true }),
+  },
+  (t) => [index('import_batches_user_idx').on(t.userId, t.createdAt)]
 )
 
 // ===== Provider infrastructure =====
@@ -372,7 +427,7 @@ export const providerCredentials = pgTable('provider_credentials', {
   source: providerSource('source').notNull().default('instance'),
   createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
   updatedAt: timestamp('updated_at', { withTimezone: true }).notNull().defaultNow(),
-})
+}, (t) => [uniqueIndex('provider_credentials_provider_id_key').on(t.providerId)])
 
 // ===== Logbook batch infrastructure =====
 

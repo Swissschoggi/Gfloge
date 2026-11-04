@@ -128,11 +128,56 @@ export function registerAccountRoutes(app: FastifyInstance): void {
     return { ok: true }
   })
 
-  app.post('/api/v1/admin/providers/:id/test', async (req) => {
+  app.post('/api/v1/admin/providers/:id/test', async (req, reply) => {
     const providerId = String((req.params as Record<string, string>).id)
     const status = (await app.providers.statusSnapshot()).find((provider) => provider.id === providerId)
-    if (!status) return { ok: false, status: 'unknown_provider', message: 'No provider adapter exists for this identifier.' }
+    if (!status) return reply.code(404).send({ ok: false, status: 'unknown_provider', message: 'No provider adapter exists for this identifier.' })
     if (providerId === 'demo') return { ok: true, status: 'ready', message: 'Demo dataset is bundled and ready.' }
-    return { ok: false, status: 'adapter_unavailable', message: 'Provider adapter is not implemented. Credentials are stored but no connection was attempted.' }
+    if (providerId === 'travelrisk') {
+      const credentials = await app.providers.credentials(providerId)
+      const { testTravelRiskConnection } = await import('../providers/travelrisk.js')
+      return testTravelRiskConnection(credentials?.apiKey ?? credentials?.secret ?? null)
+    }
+    if (providerId === 'serpapi') {
+      const credentials = await app.providers.credentials(providerId)
+      const { testSerpApiConnection } = await import('../providers/serpapi.js')
+      return testSerpApiConnection(credentials?.apiKey ?? credentials?.secret ?? null)
+    }
+    if (providerId === 'adsb.lol') {
+      const credentials = await app.providers.credentials(providerId)
+      const { testAdsbLolConnection } = await import('../providers/adsblol.js')
+      return testAdsbLolConnection(credentials?.apiKey ?? credentials?.secret ?? null)
+    }
+    if (providerId !== 'airlabs') {
+      return { ok: false, status: 'adapter_unavailable', message: `${status.displayName} adapter is not implemented. Credentials are stored but no connection was attempted.` }
+    }
+    const credentials = await app.providers.credentials(providerId)
+    if (!credentials?.secret && !credentials?.apiKey) {
+      return { ok: false, status: 'unconfigured', message: 'No API key is configured for AirLabs.' }
+    }
+    const apiKey = credentials.apiKey ?? credentials.secret
+    try {
+      const response = await fetch('https://airlabs.co/api/v9/airlines?iata_code=AA&limit=1&api_key=' + encodeURIComponent(apiKey), {
+        signal: AbortSignal.timeout(8_000),
+        headers: { accept: 'application/json' },
+      })
+      if (response.status === 401 || response.status === 403) {
+        return { ok: false, status: 'invalid_credentials', message: `AirLabs rejected the configured key (HTTP ${response.status}).` }
+      }
+      if (response.status === 429) {
+        return { ok: false, status: 'rate_limited', message: 'AirLabs rate limit reached. Try again later.' }
+      }
+      if (!response.ok) {
+        return { ok: false, status: 'provider_error', message: `AirLabs returned HTTP ${response.status}.` }
+      }
+      const body = await response.json() as { response?: unknown[]; error?: { message?: string } }
+      if (body.error?.message) {
+        return { ok: false, status: 'provider_error', message: `AirLabs returned an error: ${body.error.message}` }
+      }
+      return { ok: true, status: 'ready', message: 'AirLabs credentials are valid and the provider responded successfully.' }
+    } catch (cause) {
+      const timeout = cause instanceof Error && (cause.name === 'TimeoutError' || cause.name === 'AbortError')
+      return { ok: false, status: timeout ? 'timeout' : 'unreachable', message: timeout ? 'AirLabs did not respond within 8 seconds.' : 'AirLabs could not be reached.' }
+    }
   })
 }

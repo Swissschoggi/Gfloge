@@ -1,29 +1,70 @@
+/* eslint-disable @typescript-eslint/no-explicit-any */
 import { useState } from 'react'
-import { Link } from 'react-router'
-import { useQuery } from '@tanstack/react-query'
-import type { AirportInfo } from '@gfloge/shared'
+import { useMutation } from '@tanstack/react-query'
 import { api } from '../api/client'
 
 export function ExplorePage() {
-  const [tab, setTab] = useState<'airports' | 'airlines' | 'aircraft'>('airports')
-  const [query, setQuery] = useState('')
-  const airports = useQuery({ queryKey: ['airports', query], queryFn: () => api.get<{ results: AirportInfo[] }>(`/api/v1/airports?q=${encodeURIComponent(query)}`), enabled: tab === 'airports' })
-  const airlines = useQuery({ queryKey: ['airlines'], queryFn: () => api.get<{ results: Array<{id:string;iata:string|null;icao:string|null;name:string;country:string|null}> }>('/api/v1/airlines'), enabled: tab === 'airlines' })
-  const aircraft = useQuery({ queryKey: ['aircraft-types'], queryFn: () => api.get<{ aircraftTypes: Array<{id:string;iataType:string|null;icaoType:string|null;manufacturer:string;name:string;family:string|null}> }>('/api/v1/aircraft-types'), enabled: tab === 'aircraft' })
-  const activeQuery = tab === 'airports' ? airports : tab === 'airlines' ? airlines : aircraft
+  const [dep, setDep] = useState('')
+  const [arr, setArr] = useState('')
+  const [outDate, setOutDate] = useState(() => new Date().toISOString().slice(0, 10))
+  const [discoverResults, setDiscoverResults] = useState<any>(null)
+  const [discoverError, setDiscoverError] = useState<string | null>(null)
+  const discover = useMutation({
+    mutationFn: async () => {
+      const params = new URLSearchParams()
+      params.set('departure', dep)
+      params.set('arrival', arr)
+      params.set('outboundDate', outDate)
+      return api.get<any>(`/api/v1/flight-discovery?${params.toString()}`)
+    },
+    onSuccess: (data) => { setDiscoverResults(data); setDiscoverError(null) },
+    onError: (cause) => setDiscoverError(cause instanceof Error ? cause.message : 'Discovery failed'),
+  })
 
   return (
-    <div className="page">
-      <h1 style={{fontSize:'var(--step-2)'}}>Explore</h1>
-      <div className="explore-tabs" role="tablist" aria-label="Reference data">
-        {(['airports','airlines','aircraft'] as const).map((item) => <button type="button" role="tab" aria-selected={tab===item} aria-controls={`explore-panel-${item}`} id={`explore-tab-${item}`} className={tab===item?'explore-tab explore-tab--active':'explore-tab'} key={item} onClick={()=>{setTab(item);setQuery('')}}>{item === 'aircraft' ? 'Aircraft types' : item[0]!.toUpperCase()+item.slice(1)}</button>)}
+    <div className="page explore-page">
+      <header className="pagehead explore-masthead">
+        <div>
+          <p className="eyebrow">Flight discovery</p>
+          <h1 className="pagehead__title">Discover flights</h1>
+          <p className="pagehead__sub">Search Google Flights offers via SerpApi. Results are flight offers, not verified operations, and never enter your logbook automatically.</p>
+        </div>
+      </header>
+
+      <div className="flight-lookup-form" style={{ marginBottom: 'var(--space-m)' }}>
+        <div className="field"><span>From (IATA)</span><input className="input" value={dep} onChange={(e) => setDep(e.target.value.toUpperCase())} maxLength={4} placeholder="ZRH" /></div>
+        <div className="field"><span>To (IATA)</span><input className="input" value={arr} onChange={(e) => setArr(e.target.value.toUpperCase())} maxLength={4} placeholder="JFK" /></div>
+        <div className="field"><span>Date</span><input className="input" type="date" value={outDate} onChange={(e) => setOutDate(e.target.value)} /></div>
+        <button className="btn" type="button" disabled={discover.isPending || !dep || !arr} onClick={() => discover.mutate()}>
+          {discover.isPending ? 'Searching…' : 'Search'}
+        </button>
       </div>
-      {(tab !== 'aircraft') && <div className="field"><label htmlFor="explore-search">Search {tab}</label><input id="explore-search" className="input" value={query} onChange={(e)=>setQuery(e.target.value)} placeholder={tab === 'airports' ? 'IATA, city, or airport name' : 'Airline name or code'} /></div>}
-      {activeQuery.isPending ? <p className="form-note">Loading reference data…</p> : activeQuery.isError ? <div role="alert" className="form-error">Could not load reference data. <button className="quietlink" onClick={()=>void activeQuery.refetch()}>Retry</button></div> : null}
-      {tab === 'airports' && airports.data && <div className="data-panel"><h2 className="data-panel__title">Airports · {airports.data.results.length}</h2>{airports.data.results.length ? <ul className="explore-list">{airports.data.results.map(a=><li key={a.id}><Link className="explore-row" to={`/explore/airports/${a.id}`}><span className="airline-mark">{a.iata ?? a.icao}</span><span><strong>{a.name}</strong><small>{a.city}, {a.country} · {a.tz}</small></span><span className="menuitem__chevron">›</span></Link></li>)}</ul> : <p className="form-note">No airports match “{query}”. Clear or change your search.</p>}</div>}
-      {tab === 'airlines' && airlines.data && <div className="data-panel"><h2 className="data-panel__title">Airlines · {airlines.data.results.length}</h2><ul className="explore-list">{airlines.data.results.filter(a=>`${a.name} ${a.iata??''} ${a.icao??''}`.toLowerCase().includes(query.toLowerCase())).map(a=><li key={a.id}><Link className="explore-row" to={`/explore/airlines/${a.id}`}><span className="airline-mark">{a.iata??a.icao}</span><span><strong>{a.name}</strong><small>{a.icao} · {a.country??'Country unknown'}</small></span><span className="menuitem__chevron">›</span></Link></li>)}</ul></div>}
-      {tab === 'aircraft' && aircraft.data && <div className="data-panel"><h2 className="data-panel__title">Aircraft types · {aircraft.data.aircraftTypes.length}</h2><ul className="explore-list">{aircraft.data.aircraftTypes.map(a=><li key={a.id} className="explore-row"><span className="airline-mark">{a.icaoType??a.iataType??'?'}</span><span><strong>{a.name}</strong><small>{a.manufacturer} · IATA {a.iataType??'n/a'}</small></span></li>)}</ul></div>}
-      <p className="attribution">Reference information is bundled with Gfloge. Flight schedules and operational data require a configured provider.</p>
+      {discoverError && <p role="alert" className="form-error">{discoverError}</p>}
+      {discoverResults && (
+        <ul className="candidate-list">
+          {(discoverResults.best_flights ?? discoverResults.other_flights ?? []).map((f: any, i: number) => (
+            <li key={i}>
+              <div className="candidate-card">
+                <div className="candidate-card__top">
+                  <span className="candidate-card__code">{(f.flights?.[0]?.airline ?? 'Flight')} {f.flights?.[0]?.flight_number ?? ''}</span>
+                  <span className="candidate-card__badge">{f.price ? `${f.price}` : ''}</span>
+                </div>
+                <div className="candidate-card__route">
+                  {f.flights?.[0]?.departure_airport?.id ?? dep} → {f.flights?.[f.flights.length - 1]?.arrival_airport?.id ?? arr}
+                </div>
+                <div className="candidate-card__times">
+                  <span>{f.flights?.[0]?.departure_airport?.time ?? ''}</span>
+                  {f.flights?.[f.flights.length - 1]?.arrival_airport?.time && <span>Arrival {f.flights[f.flights.length - 1].arrival_airport.time}</span>}
+                </div>
+                <div className="candidate-card__meta">
+                  <span>{f.total_duration ? `${Math.round(f.total_duration / 60)}h ${f.total_duration % 60}m` : ''}</span>
+                  {f.carbon_emissions?.this_flight && <span>{f.carbon_emissions.this_flight}g CO₂</span>}
+                </div>
+              </div>
+            </li>
+          ))}
+        </ul>
+      )}
     </div>
   )
 }

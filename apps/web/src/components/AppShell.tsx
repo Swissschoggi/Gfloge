@@ -26,6 +26,7 @@ const NAV_GROUPS = [
   ] },
   { id: 'personal', label: 'Personal', items: [
     { to: '/logbook', label: 'Logbook', icon: IconLogbook, end: false },
+    { to: '/travel-risk', label: 'Travel risk', icon: IconExplore, end: false },
   ] },
   { id: 'system', label: 'System', items: [
     { to: '/settings', label: 'Settings', icon: IconSettings, end: false },
@@ -49,6 +50,7 @@ const SECTION_TITLES: Array<[string, string]> = [
   ['/stats', 'Stats'],
   ['/settings', 'Settings'],
   ['/add', 'Add flight'],
+  ['/travel-risk', 'Travel risk'],
   ['/more', 'More'],
 ]
 
@@ -78,7 +80,7 @@ export function AppShell() {
   const { pathname } = useLocation()
   const rail = collapsed || !viewsDesktop
   useEffect(() => {
-    document.getElementById('main')?.focus()
+    document.getElementById('main')?.focus({ preventScroll: true })
   }, [pathname])
   const sectionTitle = SECTION_TITLES.find(([prefix]) => pathname.startsWith(prefix))?.[1] ?? 'Board'
   const navigate = useNavigate()

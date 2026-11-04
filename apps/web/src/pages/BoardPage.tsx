@@ -1,236 +1,259 @@
+import { useEffect, useMemo, useState } from 'react'
 import { Link, useSearchParams } from 'react-router'
 import { useQuery } from '@tanstack/react-query'
-import type { BoardPayload, FlightRead } from '@gfloge/shared'
+import type { BoardPayload } from '@gfloge/shared'
 import { api } from '../api/client'
-import { StatusBadge, ConditionChip, statusLabel } from '../components/StatusPresentation'
-import { formatDuration, formatLocal, formatDate, sameUtcDay } from '../format'
-import { RouteSchematic } from '../components/RouteSchematic'
+import { FlightAtlas } from '../components/FlightAtlas'
+import { ConditionChip, StatusBadge } from '../components/StatusPresentation'
+import { IconChevron } from '../components/icons'
+import { formatDate, formatDuration, formatLocal, sameUtcDay } from '../format'
 
-const SKELETON_ROWS = 3
+type BoardItem = BoardPayload['active'][number]
 
-const STATUS_FILTERS: Array<[string, string]> = [
-  ['all', 'All'],
-  ['enroute', 'En route'],
-  ['boarding', 'Boarding'],
+const STATUS_OPTIONS = [
+  ['all', 'All statuses'],
   ['scheduled', 'Scheduled'],
+  ['boarding', 'Boarding'],
+  ['enroute', 'En route'],
   ['arrived', 'Arrived'],
   ['cancelled', 'Cancelled'],
   ['diverted', 'Diverted'],
-]
+] as const
 
 export function BoardPage() {
   const [searchParams, setSearchParams] = useSearchParams()
+  const [searchInput, setSearchInput] = useState(searchParams.get('q') ?? '')
   const query = searchParams.get('q') ?? ''
-  const statusFilter = searchParams.get('status') ?? 'all'
+  const status = searchParams.get('status') ?? 'all'
+  const selectedId = searchParams.get('flight')
   const board = useQuery({
     queryKey: ['board'],
     queryFn: () => api.get<BoardPayload>('/api/v1/board'),
     refetchInterval: 30_000,
   })
 
-  if (board.isPending) {
-    return (
-      <div className="page" aria-busy="true">
-        <p className="sr-only">Board loading.</p>
-        {Array.from({ length: SKELETON_ROWS }).map((_, i) => (
-          <div className="flightcard flightcard--skeleton" key={i} aria-hidden="true" />
-        ))}
-      </div>
-    )
-  }
-
-  if (board.isError) {
-    return (
-      <div className="page">
-        <h1>Board</h1>
-        <div role="alert" className="form-error" style={{ padding: 'var(--space-s) 0' }}>
-          Could not load the board. {(board.error as Error).message}
-        </div>
-        <button type="button" className="btn" onClick={() => void board.refetch()}>
-          Retry
-        </button>
-      </div>
-    )
-  }
+  useEffect(() => setSearchInput(query), [query])
 
   const data = board.data
-  const allItems = [...data.active, ...data.upcoming, ...data.landed]
-  const filtered = allItems.filter((item) => {
-    const text = `${item.flight.flightCode} ${item.flight.airline?.name ?? ''} ${item.flight.departure.iata ?? ''} ${item.flight.arrival.iata ?? ''} ${item.flight.departure.city} ${item.flight.arrival.city}`.toLowerCase()
-    return (!query || text.includes(query.toLowerCase())) &&
-      (statusFilter === 'all' || item.flight.status === statusFilter)
-  })
-  const filteredIds = new Set(filtered.map((item) => item.userFlightId))
-  const active = data.active.filter((item) => filteredIds.has(item.userFlightId))
-  const upcoming = data.upcoming.filter((item) => filteredIds.has(item.userFlightId))
-  const landed = data.landed.filter((item) => filteredIds.has(item.userFlightId))
-  const isEmpty = allItems.length === 0
-  const noMatches = !isEmpty && filtered.length === 0
+  const allItems = useMemo(() => data ? [...data.active, ...data.upcoming, ...data.landed] : [], [data])
+  const filtered = useMemo(() => allItems.filter((item) => {
+    const flight = item.flight
+    const text = `${flight.flightCode} ${flight.airline?.name ?? ''} ${flight.departure.iata ?? ''} ${flight.arrival.iata ?? ''} ${flight.departure.city} ${flight.arrival.city}`.toLowerCase()
+    return (!query || text.includes(query.toLowerCase())) && (status === 'all' || flight.status === status)
+  }), [allItems, query, status])
+  const selected = filtered.find((item) => item.userFlightId === selectedId) ?? filtered[0] ?? null
+  const active = filtered.filter((item) => data?.active.some((source) => source.userFlightId === item.userFlightId))
+  const upcoming = filtered.filter((item) => data?.upcoming.some((source) => source.userFlightId === item.userFlightId))
+  const landed = filtered.filter((item) => data?.landed.some((source) => source.userFlightId === item.userFlightId))
+
+  function updateParam(key: string, value: string) {
+    setSearchParams((current) => {
+      if (value) current.set(key, value)
+      else current.delete(key)
+      return current
+    }, { replace: true })
+  }
+
+  function clearFilters() {
+    setSearchInput('')
+    setSearchParams((current) => {
+      current.delete('q')
+      current.delete('status')
+      return current
+    }, { replace: true })
+  }
 
   return (
-    <div className="page">
-      {isEmpty ? (
-        <div className="page" style={{ gap: 'var(--space-s)' }}>
-          <RouteSchematic variant="route" />
-          <h1 style={{ fontSize: 'var(--step-2)' }}>Nothing flying yet</h1>
-          <p className="page__meta">Track a flight and watch it here, live.</p>
-          <Link to="/add" className="btn">
-            Track a flight
-          </Link>
-          <Link to="/logbook" className="quietlink">
-            or open your logbook
-          </Link>
+    <div className="flight-board">
+      <header className="flight-board__heading">
+        <div>
+          <p className="eyebrow">Operations / personal flight board</p>
+          <h1>Flight board</h1>
+          <p className="flight-board__updated">
+            {data ? `Updated ${new Date(data.generatedAt).toLocaleTimeString(undefined, { hour: '2-digit', minute: '2-digit' })} · refreshes every 30 seconds` : 'Live awareness for the flights you follow'}
+          </p>
         </div>
-      ) : (
-        <>
-          <header className="board-masthead">
-            <div>
-              <h1 className="board-masthead__title">Board</h1>
-              <p className="board-masthead__sub">
-                Updated {new Date(data.generatedAt).toLocaleTimeString(undefined, { hour: '2-digit', minute: '2-digit' })} · refreshes every 30s
-              </p>
+        <div className="flight-board__counts" aria-label="Flight totals">
+          <span><strong>{data?.active.length ?? '—'}</strong> in progress</span>
+          <span><strong>{data?.upcoming.length ?? '—'}</strong> upcoming</span>
+          <span><strong>{data?.landed.length ?? '—'}</strong> landed</span>
+          <Link to="/add" className="btn">Add flight</Link>
+        </div>
+      </header>
+
+      <section className="board-workspace" aria-label="Flight map and manifest">
+        <div className="board-workspace__map-column">
+          <FlightAtlas
+            items={filtered}
+            selected={selected}
+          />
+          {!board.isPending && !board.isError && <SelectedFlight item={selected} empty={allItems.length === 0} noMatches={filtered.length === 0 && allItems.length > 0} onClearFilters={clearFilters} />}
+        </div>
+
+        <aside className="flight-manifest" aria-labelledby="manifest-title">
+          <header className="flight-manifest__header">
+            <div className="flight-manifest__titleline">
+              <h2 id="manifest-title">Flight manifest</h2>
+              <span className="flight-manifest__count">{filtered.length}{filtered.length !== allItems.length ? ` / ${allItems.length}` : ''}</span>
+              <span className="sr-only" role="status">
+                {filtered.length} {filtered.length === 1 ? 'flight' : 'flights'} shown in the manifest
+              </span>
             </div>
-            <dl className="board-masthead__stats">
-              <div className="board-masthead__readout board-masthead__readout--live">
-                <dt className="board-masthead__label">In the air</dt>
-                <dd className="board-masthead__value">{active.length}</dd>
-              </div>
-              <div className="board-masthead__readout">
-                <dt className="board-masthead__label">Upcoming</dt>
-                <dd className="board-masthead__value">{upcoming.length}</dd>
-              </div>
-              <div className="board-masthead__readout">
-                <dt className="board-masthead__label">Landed</dt>
-                <dd className="board-masthead__value">{landed.length}</dd>
-              </div>
-            </dl>
+            <label className="sr-only" htmlFor="manifest-search">Search flights</label>
+            <input
+              id="manifest-search"
+              className="manifest-search"
+              type="search"
+              value={searchInput}
+              onChange={(event) => {
+                const value = event.target.value
+                setSearchInput(value)
+                updateParam('q', value.trim())
+              }}
+              placeholder="Flight, airline, airport…"
+            />
+            <label className="sr-only" htmlFor="manifest-status">Filter by status</label>
+            <select id="manifest-status" className="manifest-status" value={status} onChange={(event) => updateParam('status', event.target.value === 'all' ? '' : event.target.value)}>
+              {STATUS_OPTIONS.map(([value, label]) => <option key={value} value={value}>{label}</option>)}
+            </select>
           </header>
-          <div className="toolbar">
-            <div className="searchfield">
-              <svg aria-hidden="true" viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round">
-                <circle cx="11" cy="11" r="6.5" />
-                <path d="M16 16l4.5 4.5" />
-              </svg>
-              <label htmlFor="board-search" className="sr-only">Search followed flights</label>
-              <input
-                id="board-search"
-                type="search"
-                value={query}
-                onChange={(event) => {
-                  const value = event.target.value
-                  setSearchParams((current) => { if (value) current.set('q', value); else current.delete('q'); return current }, { replace: true })
-                }}
-                placeholder="Search flight, airline, airport or city"
-              />
-            </div>
-            <div className="chips" role="group" aria-label="Operational status">
-              {STATUS_FILTERS.map(([value, label]) => (
-                <button
-                  key={value}
-                  type="button"
-                  className="chip"
-                  aria-pressed={statusFilter === value}
-                  onClick={() => setSearchParams((current) => { if (value === 'all') current.delete('status'); else current.set('status', value); return current }, { replace: true })}
-                >
-                  {label}
-                </button>
-              ))}
-            </div>
+
+          <div className="flight-manifest__body" aria-busy={board.isPending}>
+            {board.isPending ? (
+              <div className="manifest-state" role="status">Loading your flights…</div>
+            ) : board.isError ? (
+              <div className="manifest-state" role="alert">
+                <p>Could not load your flights. Check your connection and try again.</p>
+                <button className="btn-outline" type="button" onClick={() => void board.refetch()}>Retry</button>
+              </div>
+            ) : allItems.length === 0 ? (
+              <div className="manifest-state manifest-state--empty">
+                <p className="eyebrow">The map is ready</p>
+                <h3>No flights followed yet</h3>
+                <p>Add a flight to begin a live manifest. Your records stay on this server.</p>
+                <Link to="/add" className="btn">Track a flight</Link>
+              </div>
+            ) : filtered.length === 0 ? (
+              <div className="manifest-state">
+                <p>No flights match these filters.</p>
+                <button className="quietlink" type="button" onClick={clearFilters}>Clear filters</button>
+              </div>
+            ) : (
+              <div className="manifest-groups">
+                <ManifestGroup title="Active and boarding" items={active} selectedId={selected?.userFlightId ?? null} onSelect={(id) => updateParam('flight', id)} />
+                <ManifestGroup title="Upcoming" items={upcoming} selectedId={selected?.userFlightId ?? null} onSelect={(id) => updateParam('flight', id)} />
+                <ManifestGroup title="Landed recently" items={landed} selectedId={selected?.userFlightId ?? null} onSelect={(id) => updateParam('flight', id)} />
+              </div>
+            )}
           </div>
-          {noMatches ? <div className="data-panel"><p>No followed flights match “{query || statusLabel(statusFilter as FlightRead['status'])}”.</p><button className="quietlink" type="button" onClick={() => setSearchParams({}, { replace: true })}>Clear filters</button></div> : <>
-          <Group title="Active and boarding" items={active} emptyText="No flight in the air right now." />
-          <Group title="Upcoming" items={upcoming} emptyText="No further flights ahead." />
-          <Group title="Landed recently" items={landed} emptyText="No landings in the last 24 hours." />
-          </>}
-        </>
-      )}
+          <footer className="flight-manifest__footer">
+            <span>Times shown at each airport</span>
+            <Link to="/logbook">Open logbook <IconChevron size={16} /></Link>
+          </footer>
+        </aside>
+      </section>
     </div>
   )
 }
 
-type GroupProps = { title: string; items: BoardPayload['active']; emptyText: string }
-
-function Group({ title, items, emptyText }: GroupProps) {
+function ManifestGroup({
+  title,
+  items,
+  selectedId,
+  onSelect,
+}: {
+  title: string
+  items: BoardItem[]
+  selectedId: string | null
+  onSelect: (id: string) => void
+}) {
   return (
-    <section className="board-group" aria-label={title}>
-      <h2 className="board-group__title">{title}</h2>
-      {items.length === 0 ? (
-        <p className="form-note" style={{ padding: 'var(--space-2xs) 0' }}>{emptyText}</p>
-      ) : (
-        <ul className="board-rows">
-          {items.map((item) => (
-            <li key={item.userFlightId}>
-              <BoardRow flight={item.flight} relation={item.relation} condition={item.condition} lastUpdate={item.lastUpdateTime} />
-            </li>
-          ))}
+    <section className="manifest-group" aria-label={`${title}, ${items.length} ${items.length === 1 ? 'flight' : 'flights'}`}>
+      <h3 className="manifest-group__heading"><span>{title}</span><span>{items.length}</span></h3>
+      {items.length === 0 ? <p className="manifest-group__empty">No flights in this group.</p> : (
+        <ul className="manifest-list">
+          {items.map((item) => <li key={item.userFlightId}>
+            <ManifestRow item={item} selected={item.userFlightId === selectedId} onSelect={() => onSelect(item.userFlightId)} />
+          </li>)}
         </ul>
       )}
     </section>
   )
 }
 
-export function BoardRow({
-  flight,
-  relation,
-  condition,
-  lastUpdate,
-}: {
-  flight: FlightRead
-  relation: 'following' | 'planned' | 'logged'
-  condition: BoardPayload['active'][number]['condition']
-  lastUpdate: string | null
-}) {
-  const today = new Date().toISOString()
-  const depIso = flight.actualDeparture ?? flight.scheduledDeparture
-  const arrIso = flight.actualArrival ?? flight.scheduledArrival
-  const minutes = Math.round((new Date(arrIso).getTime() - new Date(depIso).getTime()) / 60_000)
-  const progress =
-    flight.status === 'enroute'
-      ? Math.min(1, Math.max(0, (Date.now() - new Date(depIso).getTime()) / Math.max(1, new Date(arrIso).getTime() - new Date(depIso).getTime())))
-      : flight.status === 'arrived'
-        ? 1
-        : 0
-  const note = relation === 'planned' ? 'Planned trip' : relation === 'logged' ? 'From your logbook' : flight.airline?.name ?? 'Self entered'
-  const depDay = sameUtcDay(flight.scheduledDeparture, today) ? null : formatDate(flight.scheduledDeparture, flight.departure.tz)
-  const arrDay = sameUtcDay(flight.scheduledArrival, today) ? null : formatDate(flight.scheduledArrival, flight.arrival.tz)
+function ManifestRow({ item, selected, onSelect }: { item: BoardItem; selected: boolean; onSelect: () => void }) {
+  const flight = item.flight
+  const now = new Date().toISOString()
+  const departureDay = sameUtcDay(flight.scheduledDeparture, now) ? 'Today' : formatDate(flight.scheduledDeparture, flight.departure.tz)
+  const arrivalIso = flight.actualArrival ?? flight.scheduledArrival
+  const duration = Math.round((new Date(arrivalIso).getTime() - new Date(flight.actualDeparture ?? flight.scheduledDeparture).getTime()) / 60_000)
+
   return (
-    <Link to={`/flight/${flight.id}`} className="flightcard" data-status={flight.status}>
-      <div className="flightcard__id">
-        <span className="airline-mark" aria-label={flight.airline?.name ?? 'self entered'}>
-          {flight.airline?.iata ?? '…'}
-        </span>
-        <span className="flightcard__idtext">
-          <span className="flightcard__code">{flight.flightCode}</span>
-          <span className="flightcard__note">{note}</span>
-        </span>
-      </div>
-
-      <div className="flightcard__route">
-        <div className="flightcard__end">
-          <span className="flightcard__iata">{flight.departure.iata}</span>
-          <span className="flightcard__city">{flight.departure.city}</span>
-          <span className="flightcard__time">{formatLocal(flight.scheduledDeparture, flight.departure.tz)}</span>
-          <span className="flightcard__day">{depDay ?? 'Today'}</span>
-        </div>
-        <div className="flightcard__track" aria-hidden="true">
-          <span className="flightcard__line">
-            <span className="flightcard__progress" style={{ width: `${Math.round(progress * 100)}%` }} />
-            {flight.status === 'enroute' && <span className="flightcard__plane" style={{ left: `${Math.round(progress * 100)}%` }} />}
-          </span>
-          <span className="flightcard__dur">{formatDuration(minutes)}</span>
-        </div>
-        <div className="flightcard__end flightcard__end--arr">
-          <span className="flightcard__iata">{flight.arrival.iata}</span>
-          <span className="flightcard__city">{flight.arrival.city}</span>
-          <span className="flightcard__time">{condition === 'fresh' ? formatLocal(arrIso, flight.arrival.tz) : '—'}</span>
-          <span className="flightcard__day">{arrDay ?? 'Today'}</span>
-        </div>
-      </div>
-
-      <div className="flightcard__status">
+    <button type="button" className="manifest-row" aria-pressed={selected} onClick={onSelect}>
+      <span className="manifest-row__topline">
+        <span className="manifest-row__flight">{flight.flightCode}</span>
         <StatusBadge status={flight.status} />
-        <ConditionChip condition={condition} timestamp={lastUpdate} />
+      </span>
+      <span className="manifest-row__route">
+        <span>{flight.departure.iata ?? flight.departure.icao}</span>
+        <span aria-hidden="true">→</span>
+        <span>{flight.arrival.iata ?? flight.arrival.icao}</span>
+        <span className="manifest-row__duration">{formatDuration(duration)}</span>
+      </span>
+      <span className="manifest-row__times">
+        <span><strong>{formatLocal(flight.scheduledDeparture, flight.departure.tz)}</strong> <small>{departureDay} · {flight.departure.iata}</small></span>
+        <span><strong>{item.condition === 'fresh' ? formatLocal(arrivalIso, flight.arrival.tz) : '—'}</strong> <small>arr · {flight.arrival.iata}</small></span>
+      </span>
+      <ConditionChip condition={item.condition} timestamp={item.lastUpdateTime} />
+    </button>
+  )
+}
+
+function SelectedFlight({
+  item,
+  empty,
+  noMatches,
+  onClearFilters,
+}: {
+  item: BoardItem | null
+  empty: boolean
+  noMatches: boolean
+  onClearFilters: () => void
+}) {
+  if (!item) {
+    return (
+      <div className="selected-flight selected-flight--empty" aria-live="polite">
+        <span className="selected-flight__index">Selected flight</span>
+        <p>{empty ? 'Routes you add will appear on this atlas.' : 'Clear the manifest filters to select a flight.'}</p>
+        {noMatches && <button type="button" className="quietlink" onClick={onClearFilters}>Clear filters</button>}
       </div>
-    </Link>
+    )
+  }
+
+  const flight = item.flight
+  const arrivalIso = flight.actualArrival ?? flight.scheduledArrival
+  const duration = Math.round((new Date(arrivalIso).getTime() - new Date(flight.actualDeparture ?? flight.scheduledDeparture).getTime()) / 60_000)
+  return (
+    <article className="selected-flight" aria-live="polite" aria-label={`Selected flight ${flight.flightCode}`}>
+      <div className="selected-flight__heading">
+        <div>
+          <span className="selected-flight__index">Selected flight</span>
+          <h2>{flight.flightCode}</h2>
+        </div>
+        <div className="selected-flight__badges">
+          <StatusBadge status={flight.status} />
+          <ConditionChip condition={item.condition} timestamp={item.lastUpdateTime} />
+        </div>
+      </div>
+      <div className="selected-flight__route">
+        <div><strong>{flight.departure.iata}</strong><span>{flight.departure.city}</span><time>{formatLocal(flight.scheduledDeparture, flight.departure.tz)} · {flight.departure.iata} local</time></div>
+        <span className="selected-flight__line" aria-hidden="true" />
+        <div><strong>{flight.arrival.iata}</strong><span>{flight.arrival.city}</span><time>{item.condition === 'fresh' ? formatLocal(arrivalIso, flight.arrival.tz) : 'Time unavailable'} · {flight.arrival.iata} local</time></div>
+      </div>
+      <div className="selected-flight__actions">
+        <span>{formatDuration(duration)} planned duration</span>
+        <Link to={`/flight/${flight.id}`}>Open flight details <IconChevron size={16} /></Link>
+      </div>
+    </article>
   )
 }

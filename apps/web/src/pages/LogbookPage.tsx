@@ -1,5 +1,5 @@
-import { useState } from 'react'
-import { Link } from 'react-router'
+import { useRef, useState } from 'react'
+import { Link, useSearchParams } from 'react-router'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import type { FlightRead, StatsPayload, UserFlightItem } from '@gfloge/shared'
 import { api } from '../api/client'
@@ -7,9 +7,15 @@ import { formatDistance, formatDuration, formatLocal } from '../format'
 import { RouteSchematic } from '../components/RouteSchematic'
 
 export function LogbookPage() {
-  const [q, setQ] = useState('')
-  const [year, setYear] = useState('')
+  const [params, setParams] = useSearchParams()
+  const q = params.get('q') ?? ''
+  const year = params.get('year') ?? ''
+  const [search, setSearch] = useState(q)
+  const [pendingDelete, setPendingDelete] = useState<UserFlightItem | null>(null)
+  const deleteDialog = useRef<HTMLDialogElement>(null)
   const queryClient = useQueryClient()
+  // Keep the search input controlled by local state; syncing from the URL on
+  // every keystroke resets the cursor and limits typing to one character.
   const logbook = useQuery({
     queryKey: ['logbook', q, year],
     queryFn: () => api.get<{ flown: UserFlightItem[]; planned: UserFlightItem[]; manual: UserFlightItem[]; years: string[] }>(
@@ -27,6 +33,12 @@ export function LogbookPage() {
     },
   })
 
+  function requestDelete(item: UserFlightItem) {
+    remove.reset()
+    setPendingDelete(item)
+    deleteDialog.current?.showModal()
+  }
+
   if (logbook.isPending) {
     return (
       <div className="page">
@@ -42,7 +54,7 @@ export function LogbookPage() {
       <div className="page">
         <h1>Logbook</h1>
         <div role="alert" className="form-error">
-          Could not load the logbook. {(logbook.error as Error).message}
+          Could not load the logbook. Check your connection and try again.
         </div>
         <button className="btn" type="button" style={{ marginTop: 'var(--space-s)' }} onClick={() => void logbook.refetch()}>
           Retry
@@ -55,13 +67,15 @@ export function LogbookPage() {
   const empty = data.flown.length === 0 && data.planned.length === 0 && data.manual.length === 0
 
   return (
-    <div className="page">
-      <header className="pagehead">
+    <div className="page logbook-page">
+      <header className="pagehead logbook-masthead">
         <div>
-          <h1 className="pagehead__title">Logbook</h1>
-          <p className="pagehead__sub">Every flight you have flown, planned or noted down.</p>
+          <p className="eyebrow">Personal archive / flight record</p>
+          <h1 className="pagehead__title">Flight log</h1>
+          <p className="pagehead__sub">A permanent record of the journeys you have taken and the ones ahead.</p>
         </div>
         <div className="pagehead__actions">
+          <Link to="/import" className="btn-outline">Import CSV</Link>
           <a className="btn-outline" href="/api/v1/export/logbook.csv" download>
             Export CSV
           </a>
@@ -74,17 +88,17 @@ export function LogbookPage() {
 
       {stats.data && <StatRow stats={stats.data} />}
 
-      <div className="toolbar">
+      <div className="toolbar logbook-toolbar">
         <div className="searchfield">
           <svg aria-hidden="true" viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round">
             <circle cx="11" cy="11" r="6.5" />
             <path d="M16 16l4.5 4.5" />
           </svg>
           <label htmlFor="lb-q" className="sr-only">Search</label>
-          <input id="lb-q" type="search" value={q} onChange={(e) => setQ(e.target.value)} placeholder="Search flight, airline, city or seat" />
+          <input id="lb-q" type="search" value={search} onChange={(e) => { setSearch(e.target.value); setParams((current) => { if (e.target.value) current.set('q', e.target.value); else current.delete('q'); return current }, { replace: true }) }} placeholder="Search flight, airline, city or seat" />
         </div>
         <label htmlFor="lb-year" className="sr-only">Year</label>
-        <select id="lb-year" className="select select--compact" value={year} onChange={(e) => setYear(e.target.value)}>
+        <select id="lb-year" className="select select--compact" value={year} onChange={(e) => setParams((current) => { if (e.target.value) current.set('year', e.target.value); else current.delete('year'); return current }, { replace: true })}>
           <option value="">All years</option>
           {data.years.map((y) => (
             <option key={y} value={y}>
@@ -93,8 +107,8 @@ export function LogbookPage() {
           ))}
         </select>
         {(q !== '' || year !== '') && (
-          <button type="button" className="btn-ghost" onClick={() => { setQ(''); setYear('') }}>
-            Clear
+          <button type="button" className="btn-ghost" onClick={() => { setSearch(''); setParams({}, { replace: true }) }}>
+            Clear filters
           </button>
         )}
       </div>
@@ -102,7 +116,7 @@ export function LogbookPage() {
       {empty ? (
         <>
           <RouteSchematic variant="route" />
-          <p className="page__meta">
+          <p className="page__meta logbook-empty">
             {q || year ? 'No flights match the filters.' : 'Your logbook is empty. Log a flight, or follow one and let it flow in automatically after landing.'}
           </p>
           {!(q || year) && (
@@ -113,11 +127,25 @@ export function LogbookPage() {
         </>
       ) : (
         <>
-          <Group title="Flown" count={data.flown.length} items={data.flown} onDelete={(id) => remove.mutate(id)} deleting={remove.isPending} />
-          {data.planned.length > 0 && <Group title="Planned trips" count={data.planned.length} items={data.planned} onDelete={(id) => remove.mutate(id)} deleting={remove.isPending} planned />}
-          {data.manual.length > 0 && <Group title="Self-entered" count={data.manual.length} items={data.manual} onDelete={(id) => remove.mutate(id)} deleting={remove.isPending} />}
+          {data.planned.length > 0 && <Group title="Planned" count={data.planned.length} items={data.planned} onDelete={requestDelete} deleting={remove.isPending} planned />}
+          {data.flown.length > 0 && <Group title="Flown" count={data.flown.length} items={data.flown} onDelete={requestDelete} deleting={remove.isPending} />}
+          {data.manual.length > 0 && <Group title="Self-entered" count={data.manual.length} items={data.manual} onDelete={requestDelete} deleting={remove.isPending} />}
         </>
       )}
+
+      {remove.isError && <p className="form-error" role="alert">Could not remove the flight. It is still in your logbook; select Remove again to retry.</p>}
+      <dialog ref={deleteDialog} className="confirm-dialog" aria-labelledby="delete-flight-title" onClose={() => setPendingDelete(null)}>
+        <h2 id="delete-flight-title">Remove {pendingDelete?.flight.flightCode ?? 'this flight'} from your logbook?</h2>
+        <p>This removes your personal seat, cabin, rating and note. The shared flight record remains available.</p>
+        <div className="actions-row">
+          <button type="button" className="btn-outline" onClick={() => deleteDialog.current?.close()}>Keep record</button>
+          <button type="button" className="btn-danger" disabled={remove.isPending || !pendingDelete} onClick={() => {
+            if (!pendingDelete) return
+            remove.mutate(pendingDelete.id)
+            deleteDialog.current?.close()
+          }}>{remove.isPending ? 'Removing…' : 'Remove from logbook'}</button>
+        </div>
+      </dialog>
     </div>
   )
 }
@@ -157,7 +185,7 @@ function Group({
   count: number
   items: UserFlightItem[]
   planned?: boolean
-  onDelete: (id: string) => void
+  onDelete: (item: UserFlightItem) => void
   deleting: boolean
 }) {
   return (
@@ -215,8 +243,8 @@ function Group({
                 </td>
                 <td className="logtable__note" data-label="Note">{it.note ?? ''}</td>
                 <td className="logtable__actions">
-                  <button type="button" className="btn-quiet-danger" disabled={deleting} onClick={() => onDelete(it.id)} aria-label={`Delete ${it.flight.flightCode}`}>
-                    Delete
+                  <button type="button" className="btn-quiet-danger" disabled={deleting} onClick={() => onDelete(it)} aria-label={`Remove ${it.flight.flightCode} from your logbook`}>
+                    Remove
                   </button>
                 </td>
               </tr>

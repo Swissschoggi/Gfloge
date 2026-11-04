@@ -2,15 +2,17 @@
 // date helpers follow SCREEN_SPECIFICATIONS numerics rules.
 import { toLocalIso } from '@gfloge/shared'
 
-export function formatLocal(iso: string, tz: string): string {
+export function formatLocal(iso: string, tz: string | null): string {
   const preference = typeof localStorage === 'undefined' ? 'airport' : localStorage.getItem('gfloge-timezone-display') ?? 'airport'
-  const selectedZone = preference === 'utc' ? 'UTC' : preference === 'local' ? Intl.DateTimeFormat().resolvedOptions().timeZone : tz
+  if (preference === 'airport' && !tz) return `${iso.slice(11, 16)} UTC (tz unknown)`
+  const selectedZone = preference === 'utc' ? 'UTC' : preference === 'local' ? Intl.DateTimeFormat().resolvedOptions().timeZone : (tz ?? 'UTC')
   return toLocalIso(new Date(iso), selectedZone).slice(11)
 }
 
-export function formatDate(iso: string, tz: string): string {
+export function formatDate(iso: string, tz: string | null): string {
   const preference = typeof localStorage === 'undefined' ? 'airport' : localStorage.getItem('gfloge-timezone-display') ?? 'airport'
-  const selectedZone = preference === 'utc' ? 'UTC' : preference === 'local' ? Intl.DateTimeFormat().resolvedOptions().timeZone : tz
+  if (preference === 'airport' && !tz) return iso.slice(0, 10)
+  const selectedZone = preference === 'utc' ? 'UTC' : preference === 'local' ? Intl.DateTimeFormat().resolvedOptions().timeZone : (tz ?? 'UTC')
   return toLocalIso(new Date(iso), selectedZone).slice(0, 10)
 }
 

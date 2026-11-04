@@ -1,6 +1,7 @@
 import { eq } from 'drizzle-orm'
 import { referenceDatasets, refAirports, refAirlines, refAircraftTypes, refCountries } from '@gfloge/db'
 import type { Db } from '@gfloge/db'
+import { resolveAirportTimeZoneByCodes } from '../timezone.js'
 
 export async function installReferenceDataset(db: Db, key: string): Promise<void> {
   const [row] = await db.select().from(referenceDatasets).where(eq(referenceDatasets.key, key)).limit(1)
@@ -32,7 +33,7 @@ export async function installReferenceDataset(db: Db, key: string): Promise<void
           countryCode: cols[iCountry] || null,
           lat: iLat >= 0 ? Number(cols[iLat]) : null,
           lon: iLon >= 0 ? Number(cols[iLon]) : null,
-          tz: iTz >= 0 ? (cols[iTz] || null) : null,
+          tz: resolveAirportTimeZoneByCodes(icao, cols[iIata] || null, iTz >= 0 ? (cols[iTz] || null) : null),
           active: true,
           source: 'ourairports',
         }).onConflictDoNothing()

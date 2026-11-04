@@ -1,18 +1,15 @@
 /*
  * Gfloge, canonical design tokens.
- * Source of truth: docs/design/DESIGN_SYSTEM.md §1 (Phase 1).
+ * Source of truth: Tarmac Atlas palette; docs/design/TARMAC_ATLAS.md.
  *
  * Role notes: --font-display (Instrument Serif) is reserved for the brand
  * wordmark and personal/archival surfaces; --font-text (Instrument Sans)
  * carries the interface; --font-mono voices technical data.
  *
- * Deviations from the doc block (both spec-motivated, value-neutral):
- *  1. Font stacks additionally name metric-matched "...Fallback" families, as
- *     required by the typography loading rules (font-display: swap + no layout
- *     shift). The actual faces are unchanged.
- *  2. `color-scheme` declarations added so native form controls/scrollbars
- *     follow the active theme.
- * Every other value is verbatim from the design system.
+ * Font stacks include metric-matched fallbacks to prevent layout shift;
+ * color-scheme declarations keep native controls aligned with the theme.
+ * Palette is the current Tarmac Atlas direction; scales and semantic roles
+ * remain stable across the visual reset.
  */
 
 :root {
@@ -49,24 +46,23 @@
   --content-max: 68rem;        /* 1088px text columns; maps/table can exceed */
   --measure: 68ch;
 
-  /* ===== COLOR — BROAD DAYLIGHT (light, default) ===== */
-  --bg:           #f4f2ec;
-  --surface:      #fcfbf8;
-  --surface-2:    #ebe7de;
-  --ink:          #171c24;
-  --ink-2:        #4d5561;
-  --ink-3:        #5f6774;
-  --line:         #dcd8cc;
-  --line-strong:  #b9b4a6;
-  --accent:       #e0512a;   /* fills, large elements only */
-  --accent-ink:   #b23a12;   /* accent as text/links (AA on bg) */
-  --accent-soft:  rgba(224, 81, 42, .12);
-  --focus:        #1f5f8b;
+  /* ===== COLOR — CHART ROOM (light, default) ===== */
+  --bg:           #e7efec;
+  --surface:      #f4f8f5;
+  --surface-2:    #d9e5e1;
+  --ink:          #102b30;
+  --ink-2:        #34545a;
+  --ink-3:        #526e73;
+  --line:         #c5d5d1;
+  --line-strong:  #91aaa5;
+  --accent:       #f08a61;   /* runway signal, used sparingly */
+  --accent-ink:   #a44125;   /* accent as text/links */
+  --accent-soft:  rgba(240, 138, 97, .14);
+  --focus:        #126d76;
   --danger:       #a82418;   /* destructive actions only */
 
-  /* Filled-control foreground on accent fill (DESIGN_SYSTEM §4 contract;
-     measured: #12161d on #e0512a = 4.64:1, night near-black = 5.73:1). */
-  --on-accent:    #12161d;
+  /* Dark foreground on the runway signal; preserves legible filled controls. */
+  --on-accent:    #102b30;
 
   /* Status text variants: the foreground used by status chips/badges.
      Amber and divert (and night cancel) are darkened/lightened to clear
@@ -87,23 +83,23 @@
   --st-divert:  #b16112;
   /* each pairs with pictogram + label; never color alone */
 
-  /* ===== NIGHT OPS (dark) ===== */
-  --night-bg:           #0d1117;
-  --night-surface:      #151b24;
-  --night-surface-2:    #1c222d;
-  --night-ink:          #e7e9ec;
-  --night-ink-2:        #a8aeb8;
-  --night-ink-3:        #8b929c;
-  --night-line:         #262d38;
-  --night-line-strong:  #3a4250;
-  --night-accent:       #ef5f33;
-  --night-accent-ink:   #f0784f;
-  --night-accent-soft:  rgba(239, 95, 51, .16);
-  --night-focus:        #5da9d8;
+  /* ===== DEEP CHART (dark) ===== */
+  --night-bg:           #091c21;
+  --night-surface:      #10292f;
+  --night-surface-2:    #183940;
+  --night-ink:          #edf5f1;
+  --night-ink-2:        #b6cbc7;
+  --night-ink-3:        #99b3af;
+  --night-line:         #28464b;
+  --night-line-strong:  #47666b;
+  --night-accent:       #ff9b73;
+  --night-accent-ink:   #ffad8c;
+  --night-accent-soft:  rgba(255, 155, 115, .16);
+  --night-focus:        #72c4cf;
   --night-danger:       #e2604d;
   /* near-black foreground for accent fills in night (measured 5.73:1) and
      status text variants (same rule as day; night cancel lightened) */
-  --night-on-accent:    var(--night-bg);
+  --night-on-accent:    #10242a;
   --night-st-sched-ink:  #9aa1ab;
   --night-st-board-ink:  #f2a63c;
   --night-st-enrt-ink:   #5da9d8;
@@ -111,7 +107,7 @@
   --night-st-cancel-ink: #e87260;
   --night-st-divert-ink: #e08a2e;
 
-  /* NIGHT OPS: flight status tokens (operational status dimension, complete) */
+  /* DEEP CHART: flight status tokens (operational status dimension, complete) */
   --night-st-sched:  #9aa1ab;
   --night-st-board:  #f2a63c;
   --night-st-enrt:   #5da9d8;
@@ -119,16 +115,20 @@
   --night-st-cancel: #e2604d;
   --night-st-divert: #e08a2e;
 
-  /* ===== MAP (style JSON in repo; tokens here for UI-adjacent use) ===== */
-  --map-day-land:   #f0ede2;
-  --map-day-water:  #c9d5d2;
-  --map-day-urban:  #e3ded1;
-  --map-day-label:  #4d5561;
-  --map-night-land: #10151d;
-  --map-night-water:#0b0f16;
-  --map-night-urban:#151b22;
-  --map-night-label:#8b929c;
-  --glow-route:     rgba(242, 166, 60, .35); /* the ONLY glow permitted */
+  /* ===== MAP (local Natural Earth atlas; route context + selected route) ===== */
+  --map-day-land:          #bdcfca;
+  --map-day-water:         #dce9e5;
+  --map-day-border:        #8da8a2;
+  --map-day-grid:          #b2c9c3;
+  --map-day-route-context: #486f72;
+  --map-day-label:         #34545a;
+  --map-night-land:          #1a363b;
+  --map-night-water:         #10272c;
+  --map-night-border:        #47666b;
+  --map-night-grid:          #29464b;
+  --map-night-route-context: #8ba8a7;
+  --map-night-label:         #b6cbc7;
+  --map-selected-route:      var(--accent-ink);
 
   /* ===== FORM ===== */
   --radius: 4px;             /* the one radius. no pills, no mixed radii */
@@ -170,6 +170,7 @@
   --accent-soft: var(--night-accent-soft);
   --on-accent: var(--night-on-accent);
   --focus: var(--night-focus);    --danger: var(--night-danger);
+  --map-selected-route: var(--night-accent);
   --st-sched: var(--night-st-sched);   --st-board: var(--night-st-board);
   --st-enrt: var(--night-st-enrt);     --st-done: var(--night-st-done);
   --st-cancel: var(--night-st-cancel); --st-divert: var(--night-st-divert);
