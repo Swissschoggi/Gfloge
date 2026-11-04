@@ -1,31 +1,36 @@
+import { useEffect } from 'react'
 import { Link } from 'react-router'
-import { PagePlaceholder } from '../components/PagePlaceholder'
-import { IconChevron, IconSettings, IconStats } from '../components/icons'
+import { IconChevron, IconRisk, IconSettings, IconStats, IconTrips, IconUpload } from '../components/icons'
 
-// "More" hosts Stats and Settings on narrow widths (UX_ARCHITECTURE §1.2):
-// a proper application menu, not a link list. Expands with real screens.
+// The mobile overflow menu: everything that doesn't fit the tab bar.
+const ITEMS = [
+  { to: '/trips', label: 'Trips', icon: IconTrips },
+  { to: '/stats', label: 'Stats', icon: IconStats },
+  { to: '/travel-risk', label: 'Travel risk', icon: IconRisk },
+  { to: '/import', label: 'Import flights', icon: IconUpload },
+  { to: '/settings', label: 'Settings', icon: IconSettings },
+] as const
+
 export function MorePage() {
+  useEffect(() => {
+    document.title = 'More · Gfloge'
+  }, [])
   return (
-    <PagePlaceholder title="More" spec="More page" variant="missing">
+    <article className="page">
+      <h1>More</h1>
       <nav aria-label="More destinations">
         <ul className="menu">
-          <li className="menu__label" aria-hidden="true">App</li>
-          <li>
-            <Link to="/stats" className="menuitem">
-              <IconStats />
-              <span>Stats</span>
-              <IconChevron className="menuitem__chevron" />
-            </Link>
-          </li>
-          <li>
-            <Link to="/settings" className="menuitem">
-              <IconSettings />
-              <span>Settings</span>
-              <IconChevron className="menuitem__chevron" />
-            </Link>
-          </li>
+          {ITEMS.map(({ to, label, icon: Icon }) => (
+            <li key={to}>
+              <Link to={to} className="menuitem">
+                <Icon />
+                <span>{label}</span>
+                <IconChevron className="menuitem__chevron" />
+              </Link>
+            </li>
+          ))}
         </ul>
       </nav>
-    </PagePlaceholder>
+    </article>
   )
 }

@@ -3,6 +3,7 @@ import { Navigate, useNavigate } from 'react-router'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { api, ApiError } from '../api/client'
 import type { MePayload } from '@gfloge/shared'
+import { Brand } from '../components/Brand'
 
 export function SetupPage() {
   const navigate = useNavigate()
@@ -37,7 +38,8 @@ export function SetupPage() {
   return (
     <div className="authlayout">
       <form className="authcard" onSubmit={submit} aria-labelledby="setup-title">
-        <h1 id="setup-title" style={{ fontSize: 'var(--step-2)' }}>
+        <Brand asLink={false} />
+        <h1 id="setup-title">
           Set up your Gfloge instance
         </h1>
         <p className="form-note">This runs once: the first account becomes the instance administrator.</p>

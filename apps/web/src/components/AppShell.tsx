@@ -1,71 +1,49 @@
-import { useState, useEffect } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import { Link, NavLink, Outlet, useLocation, useNavigate } from 'react-router'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
+import { Brand } from './Brand'
 import { ThemeToggle } from './ThemeToggle'
 import {
   IconBoard,
-  IconCollapse,
   IconExplore,
-  IconExpand,
   IconLogbook,
   IconMore,
   IconPlus,
   IconSettings,
-  IconStats,
+  IconSignOut,
+  IconUpload,
 } from './icons'
 import { api } from '../api/client'
 import type { MePayload, UserPreferences } from '@gfloge/shared'
 
-// Primary destinations (UX_ARCHITECTURE §1.1); grouped so the sidebar reads
-// like an application menu, not a table of contents.
-const NAV_GROUPS = [
-  { id: 'ops', label: 'Ops', items: [
-    { to: '/', label: 'Board', icon: IconBoard, end: true },
-    { to: '/explore', label: 'Explore', icon: IconExplore, end: false },
-    { to: '/stats', label: 'Stats', icon: IconStats, end: false },
-  ] },
-  { id: 'personal', label: 'Personal', items: [
-    { to: '/logbook', label: 'Logbook', icon: IconLogbook, end: false },
-    { to: '/travel-risk', label: 'Travel risk', icon: IconExplore, end: false },
-  ] },
-  { id: 'system', label: 'System', items: [
-    { to: '/settings', label: 'Settings', icon: IconSettings, end: false },
-  ] },
+// Desktop: one floating pill holds every destination. Mobile: the same
+// destinations fold into a floating tab bar, with the rest under "More".
+const NAV_LINKS = [
+  { to: '/', label: 'Board', end: true },
+  { to: '/logbook', label: 'Logbook', end: false },
+  { to: '/trips', label: 'Trips', end: false },
+  { to: '/explore', label: 'Explore', end: false },
+  { to: '/stats', label: 'Stats', end: false },
+  { to: '/travel-risk', label: 'Travel risk', end: false },
 ] as const
 
-// Mobile bottom tabs (UX_ARCHITECTURE §1.2). Add is a centered accent action,
-// not a destination tab; More hosts Stats and Settings at narrow widths.
-const MOBILE_TABS = [
+const TABS_LEFT = [
   { to: '/', label: 'Board', icon: IconBoard, end: true },
   { to: '/logbook', label: 'Logbook', icon: IconLogbook, end: false },
+] as const
+const TABS_RIGHT = [
   { to: '/explore', label: 'Explore', icon: IconExplore, end: false },
   { to: '/more', label: 'More', icon: IconMore, end: true },
 ] as const
 
-const SECTION_TITLES: Array<[string, string]> = [
-  ['/flight', 'Flight'],
-  ['/logbook', 'Logbook'],
-  ['/trips', 'Trips'],
-  ['/explore', 'Explore'],
-  ['/stats', 'Stats'],
-  ['/settings', 'Settings'],
-  ['/add', 'Add flight'],
-  ['/travel-risk', 'Travel risk'],
-  ['/more', 'More'],
-]
-
 export function AppShell() {
-  const [collapsed, setCollapsed] = useState(false)
-  const [viewsDesktop, setViewsDesktop] = useState(
-    () => typeof window === 'undefined' || window.matchMedia('(min-width: 1024px)').matches
-  )
   const [online, setOnline] = useState(() => (typeof navigator === 'undefined' ? true : navigator.onLine))
-  useEffect(() => {
-    const media = window.matchMedia('(min-width: 1024px)')
-    const apply = () => setViewsDesktop(media.matches)
-    media.addEventListener('change', apply)
-    return () => media.removeEventListener('change', apply)
-  }, [])
+  const [menuOpen, setMenuOpen] = useState(false)
+  const menuRef = useRef<HTMLDivElement>(null)
+  const { pathname } = useLocation()
+  const navigate = useNavigate()
+  const queryClient = useQueryClient()
+
   useEffect(() => {
     const on = () => setOnline(true)
     const off = () => setOnline(false)
@@ -77,14 +55,27 @@ export function AppShell() {
     }
   }, [])
 
-  const { pathname } = useLocation()
-  const rail = collapsed || !viewsDesktop
+  // Route change: close menu, move focus to the page for screen readers.
   useEffect(() => {
+    setMenuOpen(false)
     document.getElementById('main')?.focus({ preventScroll: true })
   }, [pathname])
-  const sectionTitle = SECTION_TITLES.find(([prefix]) => pathname.startsWith(prefix))?.[1] ?? 'Board'
-  const navigate = useNavigate()
-  const queryClient = useQueryClient()
+
+  // Dismiss account menu on outside click / Escape.
+  useEffect(() => {
+    if (!menuOpen) return
+    const onDown = (e: MouseEvent) => {
+      if (menuRef.current && !menuRef.current.contains(e.target as Node)) setMenuOpen(false)
+    }
+    const onKey = (e: KeyboardEvent) => e.key === 'Escape' && setMenuOpen(false)
+    document.addEventListener('mousedown', onDown)
+    document.addEventListener('keydown', onKey)
+    return () => {
+      document.removeEventListener('mousedown', onDown)
+      document.removeEventListener('keydown', onKey)
+    }
+  }, [menuOpen])
+
   const me = useQuery({ queryKey: ['me'], queryFn: () => api.get<{ me: MePayload | null; error?: unknown }>('/api/v1/me') })
   const preferences = useQuery({
     queryKey: ['preferences'],
@@ -93,6 +84,7 @@ export function AppShell() {
     staleTime: 30_000,
   })
   const displayName = me.data?.me?.displayName
+  const email = me.data?.me?.email
 
   useEffect(() => {
     const prefs = preferences.data?.preferences
@@ -110,93 +102,92 @@ export function AppShell() {
   })
 
   return (
-    <div className="shell" data-rail={rail ? 'true' : undefined}>
-      {!online && <div role="status" className="offline-banner">You are offline. Showing saved data; changes will sync when reconnected.</div>}
+    <div className="shell">
+      {!online && (
+        <div role="status" className="announce">
+          You’re offline. Showing saved data; changes sync when you reconnect.
+        </div>
+      )}
       <a className="skip-link" href="#main">
         Skip to content
       </a>
 
-      <nav className={`sidebar${rail ? ' sidebar--rail' : ''}`} aria-label="Primary">
-        <div className="sidebar__head">
-          <Link to="/" className="sidebar__brand">
-            <span className="sidebar__brand-mark">G</span>
-            <span className="sidebar__brand-rest">floge</span>
-            <span className="sidebar__brand-dot" aria-hidden="true" />
-          </Link>
-          {viewsDesktop || collapsed ? (
-            <button
-              type="button"
-              className="sidebar__collapse"
-              aria-label={collapsed ? 'Expand sidebar' : 'Collapse sidebar'}
-              onClick={() => setCollapsed((r) => !r)}
-            >
-              {collapsed ? <IconExpand /> : <IconCollapse />}
-            </button>
-          ) : null}
-        </div>
+      <header className="navwrap">
+        <nav className="navpill" aria-label="Primary">
+          <Brand />
 
-        <div className="sidebar__nav">
-          {NAV_GROUPS.map((group) => (
-            <ul className="sidebar__list" key={group.id} aria-label={group.label}>
-              <li className="navgroup" aria-hidden="true">
-                {group.label}
+          <ul className="navpill__links">
+            {NAV_LINKS.map(({ to, label, end }) => (
+              <li key={to}>
+                <NavLink to={to} end={end} className="navlink">
+                  {label}
+                </NavLink>
               </li>
-              {group.items.map(({ to, label, icon: Icon, end }) => (
-                <li key={to}>
-                  <NavLink to={to} end={end} className="navitem" aria-label={rail ? label : undefined}>
-                    <Icon className="navitem__icon" />
-                    <span className="navitem__label sidebar__label">{label}</span>
-                  </NavLink>
-                </li>
-              ))}
-            </ul>
-          ))}
-        </div>
+            ))}
+          </ul>
 
-        <div className="sidebar__foot">
-          {displayName ? (
-            <>
-              <div className="sidebar__account">
-                <span className="sidebar__avatar" aria-hidden="true">{displayName.slice(0, 1).toUpperCase()}</span>
-                <span className="sidebar__user sidebar__label">{displayName}</span>
-                <button type="button" className="sidebar__signout sidebar__label" onClick={() => signOut.mutate()}>
-                  Sign out
-                </button>
-              </div>
-            </>
-          ) : null}
-        </div>
-      </nav>
-
-      <div className="shell__content">
-        <header className="topbar">
-          <span className="topbar__title">{sectionTitle}</span>
-          <div className="topbar__actions">
+          <div className="navpill__end">
             <ThemeToggle />
+            <Link to="/add" className="btn btn--sm navpill__add">
+              <IconPlus size={18} /> Add flight
+            </Link>
+            {displayName ? (
+              <div className="acct" ref={menuRef}>
+                <button
+                  type="button"
+                  className="acct__trigger"
+                  aria-haspopup="menu"
+                  aria-expanded={menuOpen}
+                  aria-label={`Account menu for ${displayName}`}
+                  onClick={() => setMenuOpen((open) => !open)}
+                >
+                  {displayName.slice(0, 1).toUpperCase()}
+                </button>
+                {menuOpen && (
+                  <div className="acct__menu" role="menu">
+                    <div className="acct__who">
+                      <strong>{displayName}</strong>
+                      {email ? <span>{email}</span> : null}
+                    </div>
+                    <div className="acct__sep" />
+                    <Link to="/import" role="menuitem" className="acct__item">
+                      <IconUpload size={20} /> Import flights
+                    </Link>
+                    <Link to="/settings" role="menuitem" className="acct__item">
+                      <IconSettings size={20} /> Settings
+                    </Link>
+                    <div className="acct__sep" />
+                    <button type="button" role="menuitem" className="acct__item" onClick={() => signOut.mutate()}>
+                      <IconSignOut size={20} /> Sign out
+                    </button>
+                  </div>
+                )}
+              </div>
+            ) : null}
           </div>
-        </header>
+        </nav>
+      </header>
 
-        <main id="main" className="main" tabIndex={-1}>
-          <div className="main__inner">
-            <Outlet />
-          </div>
-        </main>
-      </div>
+      <main id="main" className="main" tabIndex={-1}>
+        <div className="main__inner">
+          <Outlet />
+        </div>
+      </main>
 
-      <nav className="bottomtabs" aria-label="Mobile primary">
-        {MOBILE_TABS.slice(0, 2).map(({ to, label, icon: Icon, end }) => (
-          <NavLink key={to} to={to} end={end} className="bottomtabs__item">
-            <Icon />
-            <span className="bottomtabs__label">{label}</span>
+      <nav className="tabbar" aria-label="Mobile primary">
+        {TABS_LEFT.map(({ to, label, icon: Icon, end }) => (
+          <NavLink key={to} to={to} end={end} className="tabbar__item">
+            <Icon size={22} />
+            <span className="tabbar__label">{label}</span>
           </NavLink>
         ))}
-        <NavLink to="/add" className="bottomtabs__add" aria-label="Add flight">
-          <IconPlus />
+        <NavLink to="/add" className="tabbar__add" aria-label="Add flight">
+          <IconPlus size={26} />
         </NavLink>
-        {MOBILE_TABS.slice(2).map(({ to, label, icon: Icon, end }) => (
-          <NavLink key={to} to={to} end={end} className="bottomtabs__item">
-            <Icon />
-            <span className="bottomtabs__label">{label}</span>
+        {TABS_RIGHT.map(({ to, label, icon: Icon, end }) => (
+          <NavLink key={to} to={to} end={end} className="tabbar__item">
+            <Icon size={22} />
+            <span className="tabbar__label">{label}</span>
           </NavLink>
         ))}
       </nav>

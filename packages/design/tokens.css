@@ -1,185 +1,216 @@
 /*
- * Gfloge, canonical design tokens.
- * Source of truth: Tarmac Atlas palette; docs/design/TARMAC_ATLAS.md.
+ * Gfloge design tokens — "Control tower at midnight".
+ * Source of truth: DESIGN.md (Flighty style reference).
  *
- * Role notes: --font-display (Instrument Serif) is reserved for the brand
- * wordmark and personal/archival surfaces; --font-text (Instrument Sans)
- * carries the interface; --font-mono voices technical data.
+ * Rules of the system
+ *  - One typeface: the platform's system-ui. Weight and tracking do the work.
+ *  - One chromatic action colour (Signal Blue). Never decoration.
+ *  - Pills for every button/tag/nav; 16–20px radius for cards; never < 8px.
+ *  - Depth = layered whisper shadows (0.02–0.04) + hairlines, never heavy drops.
+ *  - Light "departure board" surfaces, dark "control room" (Deep Indigo) surfaces.
+ *  - Status colours are functional (not brand): they only ever appear with a
+ *    glyph + label, and Alert Red is reserved for cancellations/critical delays.
  *
- * Font stacks include metric-matched fallbacks to prevent layout shift;
- * color-scheme declarations keep native controls aligned with the theme.
- * Palette is the current Tarmac Atlas direction; scales and semantic roles
- * remain stable across the visual reset.
+ * Legacy token names (--bg, --surface, --ink, --accent, --space-*, --step-*)
+ * are preserved as aliases so screens keep working while migrating.
  */
 
 :root {
+  /* ===== RAW PALETTE ===== */
+  --color-signal-blue: #007bff;
+  --color-amber-alert: #f7be00;
+  --color-deep-indigo: #0d0021;
+  --color-midnight-ink: #05010d;
+  --color-pure-white: #ffffff;
+  --color-pure-black: #000000;
+  --color-carbon: #333333;
+  --color-slate: #595959;
+  --color-steel: #737373;
+  --color-fog: #808080;
+  --color-silver: #cfcfcf;
+  --color-linen: #faf8f7;
+  --color-ash: #89898e;
+  --color-alert-red: #d92d20;
+
   /* ===== TYPE ===== */
-  --font-display: "Instrument Serif", "Instrument Serif Fallback", Georgia, "Times New Roman", serif;
-  --font-text: "Instrument Sans Variable", "Instrument Sans", "Instrument Sans Fallback", "Helvetica Neue", ui-sans-serif, sans-serif;
-  --font-mono: "IBM Plex Mono", "Plex Mono Fallback", ui-monospace, "SFMono-Regular", monospace;
+  --font-sans: system-ui, -apple-system, BlinkMacSystemFont, "SF Pro Text", "Segoe UI", Inter, Roboto, ui-sans-serif, sans-serif;
+  --font-text: var(--font-sans);
+  --font-display: var(--font-sans);
+  --font-mono: var(--font-sans); /* data is system-ui + tabular figures, not a second face */
 
-  --step--2: clamp(0.6667rem, 0.64rem + 0.13vw, 0.7rem);
-  --step--1: clamp(0.8rem, 0.77rem + 0.16vw, 0.84rem);
-  --step-0:  clamp(1rem, 0.96rem + 0.2vw, 1.05rem);
-  --step-1:  clamp(1.25rem, 1.2rem + 0.25vw, 1.3125rem);
-  --step-2:  clamp(1.563rem, 1.5rem + 0.31vw, 1.64rem);
-  --step-3:  clamp(1.953rem, 1.87rem + 0.39vw, 2.05rem);
-  --step-4:  clamp(2.441rem, 2.34rem + 0.49vw, 2.5625rem);
-  --step-5:  clamp(3.052rem, 2.92rem + 0.62vw, 3.2rem);
-  --step-6:  clamp(3.815rem, 3.65rem + 0.77vw, 4rem);
+  --step--2: 0.75rem;                                   /* 12  caption */
+  --step--1: 0.8125rem;                                 /* 13  meta */
+  --step-0:  0.9375rem;                                 /* 15  UI / body */
+  --step-1:  1.0625rem;                                 /* 17  sub-headline */
+  --step-2:  1.375rem;                                  /* 22  heading-sm */
+  --step-3:  clamp(1.625rem, 1.4rem + 0.9vw, 2rem);     /* 32  heading */
+  --step-4:  clamp(2rem, 1.6rem + 1.6vw, 2.75rem);      /* 44 */
+  --step-5:  clamp(2.5rem, 1.9rem + 2.4vw, 3.5rem);     /* 56  display */
+  --step-6:  clamp(2.75rem, 2rem + 3.4vw, 4.25rem);     /* 68  IATA monument */
 
-  /* ===== SPACE (base 4px, plus a 2px micro token; no in-between values) ===== */
-  --space-3xs: 0.125rem;  /* 2 — micro token: icon alignment, split-flap ticks, hairline insets ONLY */
-  --space-2xs: 0.25rem;   /* 4  */
-  --space-xs:  0.5rem;    /* 8  */
-  --space-s:   0.75rem;   /* 12 */
-  --space-m:   1rem;      /* 16 */
-  --space-l:   1.5rem;    /* 24 */
-  --space-xl:  2rem;      /* 32 */
-  --space-2xl: 3rem;      /* 48 */
-  --space-3xl: 4rem;      /* 64 */
-  --space-4xl: 6rem;      /* 96 */
+  --tracking-display: -0.025em;
+  --tracking-body: -0.006em;
+
+  /* ===== SPACE (4px base) ===== */
+  --space-3xs: 0.125rem;
+  --space-2xs: 0.25rem;
+  --space-xs:  0.5rem;
+  --space-s:   0.75rem;
+  --space-m:   1rem;
+  --space-l:   1.5rem;
+  --space-xl:  2rem;
+  --space-2xl: 3rem;
+  --space-3xl: 4rem;
+  --space-4xl: 6rem;
 
   /* ===== LAYOUT ===== */
-  --sidebar-w: 15rem;          /* 240px — full sidebar (≥1024px) */
-  --sidebar-w-rail: 3.5rem;    /* 56px icon rail */
-  --content-max: 68rem;        /* 1088px text columns; maps/table can exceed */
-  --measure: 68ch;
+  --page-max: 75rem;           /* 1200px */
+  --content-max: var(--page-max);
+  --nav-h: 3.5rem;
+  --measure: 62ch;
 
-  /* ===== COLOR — CHART ROOM (light, default) ===== */
-  --bg:           #e7efec;
-  --surface:      #f4f8f5;
-  --surface-2:    #d9e5e1;
-  --ink:          #102b30;
-  --ink-2:        #34545a;
-  --ink-3:        #526e73;
-  --line:         #c5d5d1;
-  --line-strong:  #91aaa5;
-  --accent:       #f08a61;   /* runway signal, used sparingly */
-  --accent-ink:   #a44125;   /* accent as text/links */
-  --accent-soft:  rgba(240, 138, 97, .14);
-  --focus:        #126d76;
-  --danger:       #a82418;   /* destructive actions only */
-
-  /* Dark foreground on the runway signal; preserves legible filled controls. */
-  --on-accent:    #102b30;
-
-  /* Status text variants: the foreground used by status chips/badges.
-     Amber and divert (and night cancel) are darkened/lightened to clear
-     4.5:1 against their 12% tint — same hue, adjusted lightness. */
-  --st-sched-ink:  #5b6370;
-  --st-board-ink:  #8c5815;
-  --st-enrt-ink:   #1f5f8b;
-  --st-done-ink:   #2c6e49;
-  --st-cancel-ink: #a82418;
-  --st-divert-ink: #96520f;
-
-  /* ===== FLIGHT STATUS COLORS (operational status dimension) ===== */
-  --st-sched:   #5f6774;
-  --st-board:   #c07a1f;
-  --st-enrt:    #1f5f8b;
-  --st-done:    #2c6e49;
-  --st-cancel:  #a82418;
-  --st-divert:  #b16112;
-  /* each pairs with pictogram + label; never color alone */
-
-  /* ===== DEEP CHART (dark) ===== */
-  --night-bg:           #091c21;
-  --night-surface:      #10292f;
-  --night-surface-2:    #183940;
-  --night-ink:          #edf5f1;
-  --night-ink-2:        #b6cbc7;
-  --night-ink-3:        #99b3af;
-  --night-line:         #28464b;
-  --night-line-strong:  #47666b;
-  --night-accent:       #ff9b73;
-  --night-accent-ink:   #ffad8c;
-  --night-accent-soft:  rgba(255, 155, 115, .16);
-  --night-focus:        #72c4cf;
-  --night-danger:       #e2604d;
-  /* near-black foreground for accent fills in night (measured 5.73:1) and
-     status text variants (same rule as day; night cancel lightened) */
-  --night-on-accent:    #10242a;
-  --night-st-sched-ink:  #9aa1ab;
-  --night-st-board-ink:  #f2a63c;
-  --night-st-enrt-ink:   #5da9d8;
-  --night-st-done-ink:   #69c07d;
-  --night-st-cancel-ink: #e87260;
-  --night-st-divert-ink: #e08a2e;
-
-  /* DEEP CHART: flight status tokens (operational status dimension, complete) */
-  --night-st-sched:  #9aa1ab;
-  --night-st-board:  #f2a63c;
-  --night-st-enrt:   #5da9d8;
-  --night-st-done:   #69c07d;
-  --night-st-cancel: #e2604d;
-  --night-st-divert: #e08a2e;
-
-  /* ===== MAP (local Natural Earth atlas; route context + selected route) ===== */
-  --map-day-land:          #bdcfca;
-  --map-day-water:         #dce9e5;
-  --map-day-border:        #8da8a2;
-  --map-day-grid:          #b2c9c3;
-  --map-day-route-context: #486f72;
-  --map-day-label:         #34545a;
-  --map-night-land:          #1a363b;
-  --map-night-water:         #10272c;
-  --map-night-border:        #47666b;
-  --map-night-grid:          #29464b;
-  --map-night-route-context: #8ba8a7;
-  --map-night-label:         #b6cbc7;
-  --map-selected-route:      var(--accent-ink);
-
-  /* ===== FORM ===== */
-  --radius: 4px;             /* the one radius. no pills, no mixed radii */
-  --border: 1px solid var(--line);
-  --border-strong: 1px solid var(--line-strong);
-
-  /* ===== ELEVATION (only on floating layers) ===== */
-  --shadow-near: 0 1px 2px rgb(23 28 36 / .08);
-  --shadow-far:  0 12px 32px rgb(23 28 36 / .12);
-  --night-shadow-near: 0 1px 2px rgb(0 0 0 / .5);
-  --night-shadow-far:  0 12px 32px rgb(0 0 0 / .55);
+  /* ===== RADII ===== */
+  --radius-sm: 8px;
+  --radius-input: 12px;
+  --radius-card: 16px;
+  --radius-float: 20px;
+  --radius-panel: 24px;
+  --radius-pill: 999px;
+  --radius: var(--radius-card);
 
   /* ===== MOTION ===== */
-  --dur-fast: 120ms;  --dur: 220ms;  --dur-slow: 380ms;
-  --ease:     cubic-bezier(0.2, 0, 0, 1);
+  --dur-fast: 120ms; --dur: 220ms; --dur-slow: 380ms;
+  --ease: cubic-bezier(0.2, 0, 0, 1);
   --ease-out: cubic-bezier(0.16, 1, 0.3, 1);
 
-  /* ===== Z-INDEX LADDER (documented, never ad hoc) ===== */
+  /* ===== Z ladder ===== */
   --z-map-underlay: 0;
-  --z-content:      10;
-  --z-sidebar:      20;
-  --z-topbar-sticky:30;
-  --z-popover:      40;
-  --z-modal:        50;
-  --z-toast:        60;
-  --z-skip-link:    100;
+  --z-content: 10;
+  --z-sidebar: 30;
+  --z-topbar-sticky: 30;
+  --z-popover: 40;
+  --z-modal: 50;
+  --z-toast: 60;
+  --z-skip-link: 100;
+
+  /* ===== LIGHT — "Departure board" ===== */
+  --bg:          #ffffff;
+  --surface:     #ffffff;
+  --surface-2:   #faf8f7;                 /* Linen */
+  --surface-3:   #f2efec;
+  --ink:         #000000;
+  --ink-2:       #333333;
+  --ink-3:       #6b6b6b;                 /* 5.3:1 on white — Steel darkened for AA small text */
+  --line:        rgba(0, 0, 0, 0.08);
+  --line-strong: #cfcfcf;
+  --accent:      #007bff;                 /* Signal Blue: the action */
+  --accent-ink:  #0062cc;                 /* blue as text/link (AA on white) */
+  --accent-soft: rgba(0, 123, 255, 0.10);
+  --on-accent:   #ffffff;
+  --focus:       #007bff;
+  --danger:      #d92d20;
+  --nav-bg:      rgba(255, 255, 255, 0.82);
+
+  /* Functional status colours (never decoration; always with glyph + label) */
+  --st-sched:   #737373;
+  --st-board:   #c2570c;
+  --st-enrt:    #5b3df5;
+  --st-done:    #15803d;
+  --st-cancel:  #d92d20;
+  --st-divert:  #b4430f;
+  --st-sched-ink:  #595959;
+  --st-board-ink:  #a24a08;
+  --st-enrt-ink:   #4a2fd1;
+  --st-done-ink:   #166534;
+  --st-cancel-ink: #b42318;
+  --st-divert-ink: #9a3a0b;
+
+  /* ===== SHADOWS — whisper stacks ===== */
+  --shadow-card:
+    0 0 0 1px rgba(0,0,0,.04), 0 1px 1px .5px rgba(0,0,0,.02), 0 3px 3px 1.5px rgba(0,0,0,.02),
+    0 6px 6px -3px rgba(0,0,0,.02), 0 12px 12px -6px rgba(0,0,0,.02), 0 24px 24px -12px rgba(0,0,0,.02);
+  --shadow-nav:
+    0 0 0 1px rgba(0,0,0,.05), 0 1px 1px .5px rgba(0,0,0,.03), 0 3px 3px 1.5px rgba(0,0,0,.03),
+    0 6px 6px -3px rgba(0,0,0,.03), 0 12px 12px -6px rgba(0,0,0,.03), 0 24px 24px -12px rgba(0,0,0,.03);
+  --shadow-float:
+    0 0 0 1px rgba(0,0,0,.04), 0 2px 4px rgba(0,0,0,.04), 0 12px 24px -6px rgba(0,0,0,.10), 0 32px 48px -16px rgba(0,0,0,.18);
+  --shadow-near: var(--shadow-card);
+  --shadow-far: var(--shadow-float);
+  --card-shadow: var(--shadow-card);
+
+  /* ===== MAP — always the "glowing screen" (midnight violet in both themes) ===== */
+  --map-ocean:   #0d0021;
+  --map-land:    #1c1046;
+  --map-border:  #35286f;
+  --map-grid:    #1a0f45;
+  --map-route:   #8f86d6;
+  --map-label:   #b9b2e8;
+  --map-selected-route: #ffffff;
+  --glow-route:  rgba(150, 130, 255, 0.55);
+
+  --map-day-land: var(--map-land);   --map-night-land: var(--map-land);
+  --map-day-water: var(--map-ocean); --map-night-water: var(--map-ocean);
+  --map-day-border: var(--map-border); --map-night-border: var(--map-border);
+  --map-day-grid: var(--map-grid);   --map-night-grid: var(--map-grid);
+  --map-day-route-context: var(--map-route); --map-night-route-context: var(--map-route);
+  --map-day-label: var(--map-label); --map-night-label: var(--map-label);
+
+  --gradient-pulse: linear-gradient(180deg, #120036 0%, #250160 51%, #120036 100%);
+
+  --border: 1px solid var(--line);
+  --border-strong: 1px solid var(--line-strong);
 
   color-scheme: light;
 }
 
-/* ===== NIGHT OPS (dark theme override) ===== */
+/* ===== DARK — "Control room" ===== */
 [data-theme="night"] {
-  --bg: var(--night-bg);          --surface: var(--night-surface);
-  --surface-2: var(--night-surface-2);
-  --ink: var(--night-ink);        --ink-2: var(--night-ink-2);
-  --ink-3: var(--night-ink-3);
-  --line: var(--night-line);      --line-strong: var(--night-line-strong);
-  --accent: var(--night-accent);  --accent-ink: var(--night-accent-ink);
-  --accent-soft: var(--night-accent-soft);
-  --on-accent: var(--night-on-accent);
-  --focus: var(--night-focus);    --danger: var(--night-danger);
-  --map-selected-route: var(--night-accent);
-  --st-sched: var(--night-st-sched);   --st-board: var(--night-st-board);
-  --st-enrt: var(--night-st-enrt);     --st-done: var(--night-st-done);
-  --st-cancel: var(--night-st-cancel); --st-divert: var(--night-st-divert);
-  --st-sched-ink: var(--night-st-sched-ink);   --st-board-ink: var(--night-st-board-ink);
-  --st-enrt-ink: var(--night-st-enrt-ink);     --st-done-ink: var(--night-st-done-ink);
-  --st-cancel-ink: var(--night-st-cancel-ink); --st-divert-ink: var(--night-st-divert-ink);
-  --shadow-near: var(--night-shadow-near);
-  --shadow-far:  var(--night-shadow-far);
+  --bg:          #0d0021;                 /* Deep Indigo */
+  --surface:     #05010d;                 /* Midnight Ink: cards float on the indigo */
+  --surface-2:   #150a2e;
+  --surface-3:   #1e1140;
+  --ink:         #ffffff;
+  --ink-2:       #cfcfcf;
+  --ink-3:       #a29fb2;
+  --line:        rgba(255, 255, 255, 0.08);
+  --line-strong: rgba(255, 255, 255, 0.20);
+  --accent:      #2b8cff;
+  --accent-ink:  #6db1ff;
+  --accent-soft: rgba(43, 140, 255, 0.16);
+  --on-accent:   #ffffff;
+  --focus:       #6db1ff;
+  --danger:      #ff6b5e;
+  --nav-bg:      rgba(5, 1, 13, 0.78);
 
+  --st-sched:   #a29fb2;
+  --st-board:   #ffa04d;
+  --st-enrt:    #a393ff;
+  --st-done:    #4ade80;
+  --st-cancel:  #ff6b5e;
+  --st-divert:  #ff8a4c;
+  --st-sched-ink:  #b9b6c8;
+  --st-board-ink:  #ffb066;
+  --st-enrt-ink:   #b9adff;
+  --st-done-ink:   #6ee7a0;
+  --st-cancel-ink: #ff8a7f;
+  --st-divert-ink: #ffa370;
+
+  --shadow-card: 0 0 0 1px rgba(255,255,255,.06), 0 12px 24px -12px rgba(0,0,0,.6);
+  --shadow-nav:  0 0 0 1px rgba(255,255,255,.08), 0 16px 32px -12px rgba(0,0,0,.7);
+  --shadow-float: 0 0 0 1px rgba(255,255,255,.08), 0 24px 48px -12px rgba(0,0,0,.75);
+
+  color-scheme: dark;
+}
+
+/* Surfaces that are always "control room", regardless of theme (maps, hero). */
+.surface-night {
+  --bg: #0d0021; --surface: #05010d; --surface-2: #150a2e; --surface-3: #1e1140;
+  --ink: #fff; --ink-2: #cfcfcf; --ink-3: #a29fb2;
+  --line: rgba(255,255,255,.08); --line-strong: rgba(255,255,255,.2);
+  --accent: #2b8cff; --accent-ink: #6db1ff; --focus: #6db1ff;
+  --st-sched-ink: #b9b6c8; --st-board-ink: #ffb066; --st-enrt-ink: #b9adff;
+  --st-done-ink: #6ee7a0; --st-cancel-ink: #ff8a7f; --st-divert-ink: #ffa370;
+  color: var(--ink);
   color-scheme: dark;
 }
 

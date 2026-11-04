@@ -152,3 +152,48 @@ export function IconExpand(props: IconProps) {
     </svg>
   )
 }
+
+export function IconPlane(props: IconProps) {
+  return (
+    <svg {...base(props)} fill="currentColor" stroke="none">
+      <path d="M21 15.5v-1.6l-7.6-4.8V4a1.4 1.4 0 0 0-2.8 0v5.1L3 13.9v1.6l7.6-2.3V18l-2 1.5V21l3.4-1 3.4 1v-1.5l-2-1.5v-4.8z" />
+    </svg>
+  )
+}
+
+export function IconTrips(props: IconProps) {
+  return (
+    <svg {...base(props)}>
+      {/* trips: two stops joined by a path */}
+      <circle cx="6" cy="18" r="2.2" />
+      <circle cx="18" cy="6" r="2.2" />
+      <path d="M8.2 18H14a3 3 0 0 0 0-6h-4a3 3 0 0 1 0-6h5.8" />
+    </svg>
+  )
+}
+
+export function IconRisk(props: IconProps) {
+  return (
+    <svg {...base(props)}>
+      {/* travel risk: shield with exclamation */}
+      <path d="M12 3 5 6v5.5c0 4.2 2.9 7.4 7 9.5 4.1-2.1 7-5.3 7-9.5V6z" />
+      <path d="M12 8.5v4M12 15.8h.01" />
+    </svg>
+  )
+}
+
+export function IconUpload(props: IconProps) {
+  return (
+    <svg {...base(props)}>
+      <path d="M12 16V4M7.5 8.5 12 4l4.5 4.5M5 15v3.5A1.5 1.5 0 0 0 6.5 20h11a1.5 1.5 0 0 0 1.5-1.5V15" />
+    </svg>
+  )
+}
+
+export function IconSignOut(props: IconProps) {
+  return (
+    <svg {...base(props)}>
+      <path d="M10 4H6.5A1.5 1.5 0 0 0 5 5.5v13A1.5 1.5 0 0 0 6.5 20H10M15 8l4 4-4 4M19 12H9" />
+    </svg>
+  )
+}

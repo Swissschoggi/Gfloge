@@ -7,3 +7,4 @@ docs/
 AGENTS.md
 # React Component Preview
 previewConfig.json
+.env

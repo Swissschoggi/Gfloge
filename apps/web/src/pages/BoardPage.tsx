@@ -67,17 +67,14 @@ export function BoardPage() {
     <div className="flight-board">
       <header className="flight-board__heading">
         <div>
-          <p className="eyebrow">Operations / personal flight board</p>
-          <h1>Flight board</h1>
-          <p className="flight-board__updated">
-            {data ? `Updated ${new Date(data.generatedAt).toLocaleTimeString(undefined, { hour: '2-digit', minute: '2-digit' })} · refreshes every 30 seconds` : 'Live awareness for the flights you follow'}
-          </p>
+          <p className="eyebrow">{data ? `Updated ${new Date(data.generatedAt).toLocaleTimeString(undefined, { hour: '2-digit', minute: '2-digit' })} · live` : 'Live'}</p>
+          <h1>Your flights</h1>
+          <p className="flight-board__updated">Everything you’re tracking, on one map. Refreshes every 30 seconds.</p>
         </div>
         <div className="flight-board__counts" aria-label="Flight totals">
-          <span><strong>{data?.active.length ?? '—'}</strong> in progress</span>
+          <span><strong>{data?.active.length ?? '—'}</strong> in the air</span>
           <span><strong>{data?.upcoming.length ?? '—'}</strong> upcoming</span>
           <span><strong>{data?.landed.length ?? '—'}</strong> landed</span>
-          <Link to="/add" className="btn">Add flight</Link>
         </div>
       </header>
 
@@ -93,7 +90,7 @@ export function BoardPage() {
         <aside className="flight-manifest" aria-labelledby="manifest-title">
           <header className="flight-manifest__header">
             <div className="flight-manifest__titleline">
-              <h2 id="manifest-title">Flight manifest</h2>
+              <h2 id="manifest-title">Flights</h2>
               <span className="flight-manifest__count">{filtered.length}{filtered.length !== allItems.length ? ` / ${allItems.length}` : ''}</span>
               <span className="sr-only" role="status">
                 {filtered.length} {filtered.length === 1 ? 'flight' : 'flights'} shown in the manifest
@@ -128,9 +125,8 @@ export function BoardPage() {
               </div>
             ) : allItems.length === 0 ? (
               <div className="manifest-state manifest-state--empty">
-                <p className="eyebrow">The map is ready</p>
-                <h3>No flights followed yet</h3>
-                <p>Add a flight to begin a live manifest. Your records stay on this server.</p>
+                <h3>No flights yet</h3>
+                <p>Add a flight to see it live on the map. Everything stays on your own server.</p>
                 <Link to="/add" className="btn">Track a flight</Link>
               </div>
             ) : filtered.length === 0 ? (
@@ -140,9 +136,9 @@ export function BoardPage() {
               </div>
             ) : (
               <div className="manifest-groups">
-                <ManifestGroup title="Active and boarding" items={active} selectedId={selected?.userFlightId ?? null} onSelect={(id) => updateParam('flight', id)} />
+                <ManifestGroup title="In the air" items={active} selectedId={selected?.userFlightId ?? null} onSelect={(id) => updateParam('flight', id)} />
                 <ManifestGroup title="Upcoming" items={upcoming} selectedId={selected?.userFlightId ?? null} onSelect={(id) => updateParam('flight', id)} />
-                <ManifestGroup title="Landed recently" items={landed} selectedId={selected?.userFlightId ?? null} onSelect={(id) => updateParam('flight', id)} />
+                <ManifestGroup title="Recently landed" items={landed} selectedId={selected?.userFlightId ?? null} onSelect={(id) => updateParam('flight', id)} />
               </div>
             )}
           </div>
@@ -224,7 +220,7 @@ function SelectedFlight({
     return (
       <div className="selected-flight selected-flight--empty" aria-live="polite">
         <span className="selected-flight__index">Selected flight</span>
-        <p>{empty ? 'Routes you add will appear on this atlas.' : 'Clear the manifest filters to select a flight.'}</p>
+        <p>{empty ? 'Routes you add will light up the map.' : 'Clear the filters to select a flight.'}</p>
         {noMatches && <button type="button" className="quietlink" onClick={onClearFilters}>Clear filters</button>}
       </div>
     )

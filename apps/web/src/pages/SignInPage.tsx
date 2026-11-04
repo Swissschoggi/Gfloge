@@ -3,6 +3,7 @@ import { Navigate, useNavigate, useSearchParams } from 'react-router'
 import { useQuery, useQueryClient } from '@tanstack/react-query'
 import { api, ApiError } from '../api/client'
 import type { MePayload } from '@gfloge/shared'
+import { Brand } from '../components/Brand'
 
 export function SignInPage() {
   const navigate = useNavigate()
@@ -38,9 +39,11 @@ export function SignInPage() {
   return (
     <div className="authlayout">
       <form className="authcard" onSubmit={(e) => void submit(e)} aria-labelledby="signin-title">
-        <h1 id="signin-title" style={{ fontSize: 'var(--step-2)', letterSpacing: '-0.01em' }}>
-          Sign in
-        </h1>
+        <Brand asLink={false} />
+        <div>
+          <h1 id="signin-title">Welcome back</h1>
+          <p className="form-note">Sign in to your flight log.</p>
+        </div>
         <div className="field">
           <label htmlFor="email">Email address</label>
           <input
