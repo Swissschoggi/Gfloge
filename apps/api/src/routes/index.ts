@@ -47,6 +47,11 @@ function requireUser(req: FastifyRequest): Authed {
   return req.user as Authed
 }
 
+function alertHeadline(type: string): string {
+  const t = type.replace(/_/g, ' ')
+  return t.charAt(0).toUpperCase() + t.slice(1)
+}
+
 // ===== Board geometry helpers =====
 
 function clamp(v: number, min: number, max: number): number {
@@ -553,16 +558,46 @@ export function registerDomainRoutes(app: FastifyInstance): void {
     return { diagnostics: diagnoseFlight(flight) }
   })
 
-  // ----- Alerts -----
-
-  app.get('/api/v1/flights/:id/alerts', async (req) => {
+  // ----- User-wide activity feed -----
+  app.get('/api/v1/alerts', async (req) => {
+    const userId = requireUser(req).id
+    const limit = Math.min(50, Math.max(1, Number((req.query as Record<string, string>)['limit'] ?? 20)))
     const result = await db.execute(
-      sql`SELECT id, type, old, new, created_at FROM alerts WHERE flight_id = ${String((req.params as Record<string,string>)['id'])} ORDER BY created_at DESC LIMIT 10`
+      sql`SELECT a.id, a.type, a.flight_id, a.old, a.new, a.created_at, f.flight_code
+          FROM alerts a
+          LEFT JOIN flights f ON f.id = a.flight_id
+          WHERE a.user_id = ${userId} OR a.flight_id IN (SELECT flight_id FROM user_flights WHERE user_id = ${userId} AND flight_id IS NOT NULL)
+          ORDER BY a.created_at DESC
+          LIMIT ${limit}`
     )
-    const rows = result.rows as Array<{ id: string; type: string; old: unknown; new: unknown; created_at: Date }>
+    const rows = result.rows as Array<{ id: string; type: string; flight_id: string | null; old: unknown; new: unknown; created_at: Date; flight_code: string | null }>
     const list: AlertsPayload[] = rows.map((row) => ({
       id: row.id,
       type: row.type,
+      flightId: row.flight_id,
+      flightCode: row.flight_code,
+      headline: alertHeadline(row.type),
+      old: row.old as Record<string, unknown> | null,
+      new: row.new as Record<string, unknown> | null,
+      createdAt: new Date(row.created_at).toISOString(),
+    }))
+    return { alerts: list }
+  })
+
+  // ----- Alerts -----
+
+  app.get('/api/v1/flights/:id/alerts', async (req) => {
+    const fid = String((req.params as Record<string,string>)['id'])
+    const result = await db.execute(
+      sql`SELECT a.id, a.type, a.old, a.new, a.created_at, f.flight_code FROM alerts a LEFT JOIN flights f ON f.id = a.flight_id WHERE a.flight_id = ${fid} ORDER BY a.created_at DESC LIMIT 10`
+    )
+    const rows = result.rows as Array<{ id: string; type: string; old: unknown; new: unknown; created_at: Date; flight_code: string | null }>
+    const list: AlertsPayload[] = rows.map((row) => ({
+      id: row.id,
+      type: row.type,
+      flightId: fid,
+      flightCode: row.flight_code,
+      headline: alertHeadline(row.type),
       old: row.old as Record<string, unknown> | null,
       new: row.new as Record<string, unknown> | null,
       createdAt: new Date(row.created_at).toISOString(),

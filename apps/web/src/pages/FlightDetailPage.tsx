@@ -6,6 +6,8 @@ import { api } from '../api/client'
 import { formatDate, formatDistance, formatDuration, formatLocal, sameUtcDay } from '../format'
 import { ConditionChip, StatusBadge } from '../components/StatusPresentation'
 import { TrackMap } from '../components/TrackMap'
+import { FlightProgress } from '../components/FlightProgress'
+import { ActivityFeed } from '../components/ActivityFeed'
 
 const today = () => new Date().toISOString()
 
@@ -104,7 +106,8 @@ export function FlightDetailPage() {
     return (
       <div className="page flight-detail-page">
         <div className="data-panel">
-          <p className="form-note">Loading flight…</p>
+          <div className="skeleton skeleton-card" />
+          <div className="skeleton skeleton-card" />
         </div>
       </div>
     )
@@ -122,6 +125,7 @@ export function FlightDetailPage() {
       </button>
       <header className="hero flight-detail-hero">
         <div className="hero__meta">
+          <FlightProgress status={f.status} departure={f.actualDeparture ?? f.scheduledDeparture} arrival={f.actualArrival ?? f.scheduledArrival} />
           <span className="airline-mark">{f.airline?.iata ?? 'SEL'}</span>
           <span className="hero__airline">{f.airline?.name ?? 'Self-entered flight'}</span>
           <StatusBadge status={f.status} />
@@ -269,7 +273,7 @@ export function FlightDetailPage() {
           <div className="data-panel">
             <h2 className="data-panel__title">Airport weather</h2>
             <ConditionChip condition="unavailable" />
-            <p className="form-note">Weather observations are not connected in this milestone. No conditions are inferred.</p>
+            <p className="form-note">Weather observations are not available for this flight.</p>
             <div className="weather-pair"><span>{f.departure.iata} · {f.departure.tz}</span><span>{f.arrival.iata} · {f.arrival.tz}</span></div>
           </div>
 
@@ -323,6 +327,10 @@ export function FlightDetailPage() {
           <ManualEditForm flight={f} onSave={(payload) => updateFlight.mutate(payload)} saving={updateFlight.isPending} error={editError} />
         </section>
       )}
+      <section className="data-panel" style={{ marginTop: 'var(--space-m)' }}>
+        <h2 className="data-panel__title">Activity</h2>
+        <ActivityFeed flightId={flightId} />
+      </section>
     </article>
   )
 }

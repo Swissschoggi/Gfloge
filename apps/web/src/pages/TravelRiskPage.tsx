@@ -55,7 +55,7 @@ export function TravelRiskPage() {
         <button className="btn" type="submit">Look up</button>
       </form>
 
-      {risk.isPending && <p>Loading…</p>}
+      {risk.isPending && <div className="skeleton skeleton-card" aria-busy="true" />}
       {risk.isError && <p role="alert" className="form-error">{risk.error.message}</p>}
 
       {risk.data && (

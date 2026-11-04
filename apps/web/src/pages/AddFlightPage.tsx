@@ -96,7 +96,7 @@ export function AddFlightPage() {
     try {
       if (candidate.kind === 'historical') {
         const resolved = await resolve.mutateAsync(candidate.token ?? '')
-        await saveRelation(resolved.flightId, resolved.manualFlightId, mode === 'track' ? 'planned' : 'flown')
+        await saveRelation(undefined, resolved.manualFlightId, mode === 'track' ? 'planned' : 'flown')
         return
       }
       if (candidate.kind === 'demo') {

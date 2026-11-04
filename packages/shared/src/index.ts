@@ -294,6 +294,9 @@ export type PositionData = {
 export type AlertsPayload = {
   id: string
   type: string
+  flightId: string | null
+  flightCode: string | null
+  headline: string
   old: Record<string, unknown> | null
   new: Record<string, unknown> | null
   createdAt: string

@@ -44,7 +44,12 @@ const INITIAL_VIEW: View = { scale: 1, x: 0, y: 0 }
 async function readGzipJson<T>(url: string, signal: AbortSignal): Promise<T> {
   const response = await fetch(url, { signal })
   if (!response.ok) throw new Error('The bundled map file could not be loaded.')
-  if (!response.body || typeof DecompressionStream === 'undefined') {
+  if (!response.body) throw new Error('The bundled map file could not be loaded.')
+  const alreadyDecoded = response.headers.get('content-encoding') === 'gzip'
+  if (alreadyDecoded) {
+    return response.json() as Promise<T>
+  }
+  if (typeof DecompressionStream === 'undefined') {
     throw new Error('This browser cannot open the bundled map data.')
   }
   const body = response.body.pipeThrough(new DecompressionStream('gzip'))
@@ -64,7 +69,7 @@ export function useWorldAtlas() {
     queryKey: ['world-atlas', 'natural-earth-50m'],
     queryFn: ({ signal }) => loadWorld(signal),
     staleTime: Infinity,
-    gcTime: Infinity,
+    gcTime: 30 * 60 * 1000,
     retry: 1,
   })
 }

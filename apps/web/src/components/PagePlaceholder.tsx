@@ -16,6 +16,8 @@ type PagePlaceholderProps = {
 // grounded empty states without fabricated screen content. Real screens
 // replace them as specified in docs/design/SCREEN_SPECIFICATIONS.md.
 export function PagePlaceholder({ title, spec, variant = 'planned', children }: PagePlaceholderProps) {
+  void spec
+  void variant
   const headingRef = useRef<HTMLHeadingElement>(null)
 
   useEffect(() => {
@@ -29,12 +31,9 @@ export function PagePlaceholder({ title, spec, variant = 'planned', children }: 
       <h1 ref={headingRef} tabIndex={-1}>
         {title}
       </h1>
-      {variant === 'planned' ? <span className="statuschip">Not yet built · {spec}</span> : null}
       {children ?? (
         <p className="page__meta">
-          This screen is specified in <code>docs/design/SCREEN_SPECIFICATIONS.md ({spec})</code> and is
-          implemented in an upcoming Phase 1 step. Navigation, theming and the application shell are
-          live.
+          This section is coming soon.
         </p>
       )}
     </article>

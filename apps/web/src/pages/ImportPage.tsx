@@ -113,7 +113,7 @@ export function ImportPage() {
 
       <header className="pagehead">
         <div>
-          <p className="eyebrow">Personal archive / migration</p>
+          <p className="eyebrow">Import</p>
           <h1 className="pagehead__title">Import flight history</h1>
           <p className="pagehead__sub">Migrate flights from another tracker without losing provenance.</p>
         </div>

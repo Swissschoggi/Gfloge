@@ -19,7 +19,7 @@ export function StatsPage() {
   if (stats.isError) {
     return (
       <div className="page stats-page">
-        <header className="pagehead"><p className="eyebrow">Personal archive</p><h1>Travel record</h1></header>
+        <header className="pagehead"><p className="eyebrow">Statistics</p><h1>Travel record</h1></header>
         <div role="alert" className="form-error">Could not load your statistics. Check your connection and try again.</div>
         <button className="btn" type="button" onClick={() => void stats.refetch()}>Retry statistics</button>
       </div>
@@ -43,7 +43,7 @@ export function StatsPage() {
 
       <header className="stats-heading">
         <div>
-          <p className="eyebrow">Personal archive / completed flights</p>
+          <p className="eyebrow">Statistics</p>
           <h1>Travel record</h1>
           <p>Only flown logbook entries count here. Planned trips stay out of every total.</p>
         </div>

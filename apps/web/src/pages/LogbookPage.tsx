@@ -1,4 +1,4 @@
-import { useRef, useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import { Link, useSearchParams } from 'react-router'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import type { FlightRead, StatsPayload, UserFlightItem } from '@gfloge/shared'
@@ -11,8 +11,11 @@ export function LogbookPage() {
   const q = params.get('q') ?? ''
   const year = params.get('year') ?? ''
   const [search, setSearch] = useState(q)
+  const [view, setView] = useState<'cards' | 'table'>(() => (localStorage.getItem('gfloge-logbook-view') as 'cards' | 'table') ?? 'cards')
+  const [showMoreStats, setShowMoreStats] = useState(false)
   const [pendingDelete, setPendingDelete] = useState<UserFlightItem | null>(null)
   const deleteDialog = useRef<HTMLDialogElement>(null)
+  useEffect(() => { localStorage.setItem('gfloge-logbook-view', view) }, [view])
   const queryClient = useQueryClient()
   // Keep the search input controlled by local state; syncing from the URL on
   // every keystroke resets the cursor and limits typing to one character.
@@ -70,7 +73,7 @@ export function LogbookPage() {
     <div className="page logbook-page">
       <header className="pagehead logbook-masthead">
         <div>
-          <p className="eyebrow">Personal archive / flight record</p>
+          <p className="eyebrow">Logbook</p>
           <h1 className="pagehead__title">Flight log</h1>
           <p className="pagehead__sub">A permanent record of the journeys you have taken and the ones ahead.</p>
         </div>
@@ -86,9 +89,14 @@ export function LogbookPage() {
         </div>
       </header>
 
-      {stats.data && <StatRow stats={stats.data} />}
+      {stats.data && <StatRow stats={stats.data} expanded={showMoreStats} onToggle={() => setShowMoreStats((v) => !v)} />}
+      {data && data.flown.length > 0 && <YearInReview items={data.flown} />}
 
       <div className="toolbar logbook-toolbar">
+        <div className="view-toggle" role="group" aria-label="View">
+          <button type="button" className={view === 'cards' ? 'btn' : 'btn-ghost'} onClick={() => setView('cards')}>Cards</button>
+          <button type="button" className={view === 'table' ? 'btn' : 'btn-ghost'} onClick={() => setView('table')}>Table</button>
+        </div>
         <div className="searchfield">
           <svg aria-hidden="true" viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round">
             <circle cx="11" cy="11" r="6.5" />
@@ -125,12 +133,25 @@ export function LogbookPage() {
             </div>
           )}
         </>
-      ) : (
+      ) : view === 'table' ? (
         <>
           {data.planned.length > 0 && <Group title="Planned" count={data.planned.length} items={data.planned} onDelete={requestDelete} deleting={remove.isPending} planned />}
           {data.flown.length > 0 && <Group title="Flown" count={data.flown.length} items={data.flown} onDelete={requestDelete} deleting={remove.isPending} />}
           {data.manual.length > 0 && <Group title="Self-entered" count={data.manual.length} items={data.manual} onDelete={requestDelete} deleting={remove.isPending} />}
         </>
+      ) : (
+        <div className="logbook-cards">
+          {[...data.planned, ...data.flown, ...data.manual]
+            .sort((a, b) => b.flight.scheduledDeparture.localeCompare(a.flight.scheduledDeparture))
+            .map((it) => (
+              <Link key={it.id} to={`/flight/${it.flight.id}`} className="logbook-card">
+                <span className="logbook-card__date">{flightDate(it.flight)}</span>
+                <span className="logbook-card__code">{it.flight.flightCode}</span>
+                <span className="logbook-card__route">{it.flight.departure.iata ?? it.flight.departure.icao} → {it.flight.arrival.iata ?? it.flight.arrival.icao}</span>
+                <span className="logbook-card__meta">{it.flight.airline?.name ?? ''} · {it.flight.aircraft?.icaoType ?? ''}</span>
+              </Link>
+            ))}
+        </div>
       )}
 
       {remove.isError && <p className="form-error" role="alert">Could not remove the flight. It is still in your logbook; select Remove again to retry.</p>}
@@ -150,16 +171,21 @@ export function LogbookPage() {
   )
 }
 
-function StatRow({ stats }: { stats: StatsPayload }) {
+function StatRow({ stats, expanded, onToggle }: { stats: StatsPayload; expanded: boolean; onToggle: () => void }) {
   return (
     <div className="statstrip">
       <StatBlock value={String(stats.flights)} label="Flights flown" />
       <StatBlock value={formatDistance(stats.distanceKm)} label="Distance" />
       <StatBlock value={formatDuration(stats.minutes)} label="Time in the air" />
       <StatBlock value={String(stats.uniqueAirports)} label="Airports" />
-      <StatBlock value={String(stats.uniqueAirlines)} label="Airlines" />
-      <StatBlock value={String(stats.uniqueAircraftTypes)} label="Aircraft types" />
-      <StatBlock value={String(stats.countriesVisited)} label="Countries" />
+      {expanded && (
+        <>
+          <StatBlock value={String(stats.uniqueAirlines)} label="Airlines" />
+          <StatBlock value={String(stats.uniqueAircraftTypes)} label="Aircraft types" />
+          <StatBlock value={String(stats.countriesVisited)} label="Countries" />
+        </>
+      )}
+      <button type="button" className="btn-ghost" onClick={onToggle}>{expanded ? 'Less' : 'More'}</button>
     </div>
   )
 }
@@ -259,4 +285,39 @@ function Group({
 function flightDate(f: FlightRead): string {
   const iso = f.actualDeparture ?? f.scheduledDeparture
   return new Date(iso).toISOString().slice(0, 10)
+}
+
+function YearInReview({ items }: { items: UserFlightItem[] }) {
+  const total = items.length
+  const distance = items.reduce((s, it) => s + (it.flight.distanceKm ?? 0), 0)
+  const earthCircumference = 40075
+  const timesAround = (distance / earthCircumference).toFixed(1)
+  const durations = items.map((it) => {
+    const d = (new Date(it.flight.actualArrival ?? it.flight.scheduledArrival).getTime() - new Date(it.flight.actualDeparture ?? it.flight.scheduledDeparture).getTime()) / 60000
+    return { item: it, minutes: d }
+  }).filter((x) => x.minutes > 0)
+  const longest = durations.length ? durations.reduce((a, b) => (b.minutes > a.minutes ? b : a)) : null
+  const shortest = durations.length ? durations.reduce((a, b) => (b.minutes < a.minutes ? b : a)) : null
+  const routeCounts = new Map<string, number>()
+  items.forEach((it) => {
+    const r = `${it.flight.departure.iata ?? it.flight.departure.icao}→${it.flight.arrival.iata ?? it.flight.arrival.icao}`
+    routeCounts.set(r, (routeCounts.get(r) ?? 0) + 1)
+  })
+  const topRoute = [...routeCounts.entries()].sort((a, b) => b[1] - a[1])[0]
+  const typeCounts = new Map<string, number>()
+  items.forEach((it) => {
+    const t = it.flight.aircraft?.icaoType ?? 'unknown'
+    typeCounts.set(t, (typeCounts.get(t) ?? 0) + 1)
+  })
+  const topType = [...typeCounts.entries()].sort((a, b) => b[1] - a[1])[0]
+  return (
+    <section className="data-panel" aria-label="Year in review">
+      <h2 className="data-panel__title">Year in review</h2>
+      <p className="form-note">{total} flights · {formatDistance(distance)} · {timesAround}× around the Earth</p>
+      {longest && <p className="form-note">Longest: {longest.item.flight.flightCode} {longest.item.flight.departure.iata}→{longest.item.flight.arrival.iata} ({formatDuration(longest.minutes)})</p>}
+      {shortest && <p className="form-note">Shortest: {shortest.item.flight.flightCode} {shortest.item.flight.departure.iata}→{shortest.item.flight.arrival.iata} ({formatDuration(shortest.minutes)})</p>}
+      {topRoute && <p className="form-note">Top route: {topRoute[0]} ({topRoute[1]}×)</p>}
+      {topType && <p className="form-note">Top aircraft: {topType[0]} ({topType[1]}×)</p>}
+    </section>
+  )
 }

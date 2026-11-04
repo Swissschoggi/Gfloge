@@ -5,6 +5,8 @@ import type { BoardPayload } from '@gfloge/shared'
 import { api } from '../api/client'
 import { FlightAtlas } from '../components/FlightAtlas'
 import { ConditionChip, StatusBadge } from '../components/StatusPresentation'
+import { FlightProgress } from '../components/FlightProgress'
+import { ActivityFeed } from '../components/ActivityFeed'
 import { IconChevron } from '../components/icons'
 import { formatDate, formatDuration, formatLocal, sameUtcDay } from '../format'
 
@@ -30,6 +32,7 @@ export function BoardPage() {
     queryKey: ['board'],
     queryFn: () => api.get<BoardPayload>('/api/v1/board'),
     refetchInterval: 30_000,
+    staleTime: 15_000,
   })
 
   useEffect(() => setSearchInput(query), [query])
@@ -117,7 +120,11 @@ export function BoardPage() {
 
           <div className="flight-manifest__body" aria-busy={board.isPending}>
             {board.isPending ? (
-              <div className="manifest-state" role="status">Loading your flights…</div>
+              <div className="manifest-state" role="status" aria-busy="true">
+                <div className="skeleton skeleton-card" />
+                <div className="skeleton skeleton-card" />
+                <div className="skeleton skeleton-card" />
+              </div>
             ) : board.isError ? (
               <div className="manifest-state" role="alert">
                 <p>Could not load your flights. Check your connection and try again.</p>
@@ -147,6 +154,10 @@ export function BoardPage() {
             <Link to="/logbook">Open logbook <IconChevron size={16} /></Link>
           </footer>
         </aside>
+      </section>
+      <section className="board-activity" aria-label="Recent activity">
+        <h2>Activity</h2>
+        <ActivityFeed />
       </section>
     </div>
   )
@@ -200,6 +211,7 @@ function ManifestRow({ item, selected, onSelect }: { item: BoardItem; selected: 
         <span><strong>{formatLocal(flight.scheduledDeparture, flight.departure.tz)}</strong> <small>{departureDay} · {flight.departure.iata}</small></span>
         <span><strong>{item.condition === 'fresh' ? formatLocal(arrivalIso, flight.arrival.tz) : '—'}</strong> <small>arr · {flight.arrival.iata}</small></span>
       </span>
+      <FlightProgress compact status={flight.status} departure={flight.actualDeparture ?? flight.scheduledDeparture} arrival={flight.actualArrival ?? flight.scheduledArrival} />
       <ConditionChip condition={item.condition} timestamp={item.lastUpdateTime} />
     </button>
   )
@@ -246,6 +258,7 @@ function SelectedFlight({
         <span className="selected-flight__line" aria-hidden="true" />
         <div><strong>{flight.arrival.iata}</strong><span>{flight.arrival.city}</span><time>{item.condition === 'fresh' ? formatLocal(arrivalIso, flight.arrival.tz) : 'Time unavailable'} · {flight.arrival.iata} local</time></div>
       </div>
+      <FlightProgress status={flight.status} departure={flight.actualDeparture ?? flight.scheduledDeparture} arrival={flight.actualArrival ?? flight.scheduledArrival} />
       <div className="selected-flight__actions">
         <span>{formatDuration(duration)} planned duration</span>
         <Link to={`/flight/${flight.id}`}>Open flight details <IconChevron size={16} /></Link>
