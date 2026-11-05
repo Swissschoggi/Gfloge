@@ -1,4 +1,4 @@
-import { Link, useNavigate, useParams } from 'react-router'
+import { Link, useParams } from 'react-router'
 import { useQuery } from '@tanstack/react-query'
 import type { FlightRead } from '@gfloge/shared'
 import { api } from '../api/client'
@@ -16,7 +16,6 @@ type AirportResponse = {
 
 export function AirportDetailPage() {
   const { airportId = '' } = useParams()
-  const navigate = useNavigate()
   const query = useQuery({ queryKey: ['airport', airportId], queryFn: () => api.get<AirportResponse>(`/api/v1/airports/${airportId}`) })
 
   if (query.isPending) return <div className="page reference-detail-page" aria-busy="true"><p role="status">Loading airport record…</p></div>
@@ -35,8 +34,7 @@ export function AirportDetailPage() {
   const mapAirport = toAtlasAirport(airport)
   return (
     <div className="page reference-detail-page airport-detail-page">
-      <button type="button" className="back-link" onClick={() => navigate(-1)}>← Back</button>
-      <Link className="quietlink" to="/explore?tab=airports">Airport index</Link>
+      <Link className="back-link" to="/explore?tab=airports">← Airport index</Link>
       <header className="airport-masthead">
         <div className="airport-masthead__codes">
           <span>{airport.iata ?? '—'}</span>
@@ -59,10 +57,12 @@ export function AirportDetailPage() {
             routes={[]}
             airports={[mapAirport]}
             featuredAirportId={mapAirport.id}
+            initialCenter={[airport.lat, airport.lon]}
+            initialZoom={7}
             heading="Airport location"
             countLabel={airport.iata ?? airport.icao ?? 'Airport'}
             footerLabel={dataSource}
-            description={`Natural Earth geography with ${airport.name} plotted at ${airport.lat.toFixed(4)} latitude, ${airport.lon.toFixed(4)} longitude.`}
+            description={`Map framed on ${airport.name}.`}
           />
         </div>
         <aside className="airport-operations" aria-label="Airport activity and conditions">
@@ -74,11 +74,13 @@ export function AirportDetailPage() {
             <header><h2 id="arrivals-heading">Arrivals</h2><span>Next 24 hours · {arrivals.length}</span></header>
             <FlightList rows={arrivals.map((entry) => entry.flight)} empty={`No arrival records for ${airport.iata ?? airport.name} in the next 24 hours.`} />
           </section>
+          {weather.condition !== 'unsupported' && (
           <section className="airport-weather" aria-labelledby="airport-weather-heading">
             <h2 id="airport-weather-heading">Weather</h2>
-            <ConditionChip condition={weather.condition === 'unsupported' ? 'unavailable' : weather.condition} />
+            <ConditionChip condition={weather.condition} />
             <p>{weather.message}</p>
           </section>
+          )}
         </aside>
       </div>
     </div>

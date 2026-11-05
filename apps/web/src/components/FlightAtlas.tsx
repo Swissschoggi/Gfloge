@@ -83,6 +83,8 @@ export function AtlasSurface({
   countLabel,
   footerLabel = '© OpenStreetMap contributors',
   description,
+  initialCenter,
+  initialZoom,
 }: {
   routes: AtlasRoute[]
   airports: AtlasAirport[]
@@ -93,6 +95,8 @@ export function AtlasSurface({
   countLabel?: string
   footerLabel?: string
   description?: string
+  initialCenter?: [number, number]
+  initialZoom?: number
 }) {
   const containerRef = useRef<HTMLDivElement>(null)
   const mapRef = useRef<any>(null)
@@ -109,7 +113,7 @@ export function AtlasSurface({
       if (cancelled || !containerRef.current) return
       const L = (mod as any).default || mod
       leafletRef.current = L
-      map = L.map(containerRef.current).setView([20, 0], 2)
+      map = L.map(containerRef.current).setView(initialCenter ? [initialCenter[0], initialCenter[1]] : [20, 0], initialZoom ?? 2)
       L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', { attribution: '© OpenStreetMap contributors', maxZoom: 19 }).addTo(map)
       mapRef.current = map
       ;(window as any).__gfMap = map
@@ -120,7 +124,7 @@ export function AtlasSurface({
       if (map) map.remove()
       mapRef.current = null
     }
-  }, [])
+  }, []) // eslint-disable-line react-hooks/exhaustive-deps
 
   useEffect(() => {
     const map = mapRef.current

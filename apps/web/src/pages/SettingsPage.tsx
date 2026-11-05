@@ -24,13 +24,13 @@ export function SettingsPage() {
   const requested = params.get('tab') ?? 'profile'
   const me = useMe()
   const isAdmin = me.data?.me?.role === 'admin'
-  const visible = TABS.filter((tab) => ['profile', 'calendar', 'notifications', 'trips', 'historical', 'reference'].includes(tab.key) || isAdmin)
+  const visible = TABS.filter((tab) => ['profile', 'calendar', 'notifications', 'historical', 'reference'].includes(tab.key) || isAdmin)
   const active = visible.some((tab) => tab.key === requested) ? requested : 'profile'
   return (
     <div className="page settings-page">
 
       <header className="settings-heading">
-        <div><p className="eyebrow">Account / instance controls</p><h1>Settings</h1></div>
+        <div><p className="eyebrow">Settings</p><h1>Settings</h1></div>
         <p>Personal display preferences and instance administration.</p>
       </header>
       <div className="settings-workspace">

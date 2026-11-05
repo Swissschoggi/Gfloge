@@ -1,302 +1,615 @@
 import { useEffect, useRef, useState, type FormEvent } from 'react'
-import { Link, useNavigate, useParams } from 'react-router'
+import { Link, useNavigate, useParams, useSearchParams } from 'react-router'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
-import type { TripRead } from '@gfloge/shared'
+import { isTightLayover, layoverMinutes, type TripRead } from '@gfloge/shared'
 import { api } from '../api/client'
-import { formatDate, formatDuration, formatLocal } from '../format'
-import { IconChevron } from '../components/icons'
+import { formatDate, formatDistance, formatDuration, formatLocal } from '../format'
+import { IconChevron, IconPlus } from '../components/icons'
 import { StatusBadge } from '../components/StatusPresentation'
+import { FlightProgress } from '../components/FlightProgress'
 import { AtlasSurface, toAtlasAirport } from '../components/FlightAtlas'
 import { exportTripCardPng } from '../lib/exportImage'
+import {
+  airportCode,
+  describeLayover,
+  summarizeTrip,
+  type Layover,
+  type TripLeg,
+  type TripPhase,
+  type TripSummary,
+} from '../lib/trip'
 
 type TripLogbook = {
-  flown: Array<{ id: string; flight: TripRead['flights'][number]['flight'] }>
-  planned: Array<{ id: string; flight: TripRead['flights'][number]['flight'] }>
-  manual: Array<{ id: string; flight: TripRead['flights'][number]['flight'] }>
+  flown: Array<{ id: string; flight: TripLeg['flight'] }>
+  planned: Array<{ id: string; flight: TripLeg['flight'] }>
+  manual: Array<{ id: string; flight: TripLeg['flight'] }>
+}
+type NewTrip = { name: string; description?: string; startDate?: string; endDate?: string }
+
+/** "2026-11-05" → "Thu 5 Nov" (formatDate returns an ISO date in the chosen timezone). */
+function friendlyDate(iso: string, tz: string | null): string {
+  const [y, m, d] = formatDate(iso, tz).split('-').map(Number)
+  if (!y || !m || !d) return formatDate(iso, tz)
+  return new Date(y, m - 1, d).toLocaleDateString(undefined, { weekday: 'short', day: 'numeric', month: 'short' })
 }
 
-
-
-function connectionInfo(current: TripRead['flights'][number]['flight'], next: TripRead['flights'][number]['flight']): { text: string; warning: boolean } {
-  const arrIso = current.actualArrival ?? current.scheduledArrival
-  const depIso = next.scheduledDeparture
-  const arrTime = Date.parse(arrIso)
-  const depTime = Date.parse(depIso)
-  const airportChange = (current.arrival.iata ?? current.arrival.icao) !== (next.departure.iata ?? next.departure.icao)
-  const missingTz = !current.arrival.tz || !next.departure.tz
-  if (!Number.isFinite(arrTime) || !Number.isFinite(depTime)) {
-    return { text: 'Connection time cannot be calculated because arrival or departure time data is missing.', warning: true }
-  }
-  const minutes = Math.round((depTime - arrTime) / 60000)
-  if (minutes < 0) {
-    return { text: `Connection timing is inconsistent (arrival after next departure by ${formatDuration(Math.abs(minutes))}). Check dates and times.`, warning: true }
-  }
-  const parts = [`Connection time: ${formatDuration(minutes)}`]
-  if (airportChange) parts.push('airport change required')
-  if (missingTz) parts.push('timezone information is missing')
-  parts.push('this is a heuristic; airport-specific minimum connection times are not available')
-  const warning = minutes < 120 || airportChange
-  return { text: parts.join(' · '), warning }
+function dateRange(trip: TripRead, summary: TripSummary): string | null {
+  const first = summary.legs[0]?.flight
+  const last = summary.legs[summary.legs.length - 1]?.flight
+  const start = first ? friendlyDate(first.scheduledDeparture, first.departure.tz) : trip.startDate ? friendlyDate(trip.startDate, 'UTC') : null
+  const end = last ? friendlyDate(last.scheduledArrival, last.arrival.tz) : trip.endDate ? friendlyDate(trip.endDate, 'UTC') : null
+  if (!start) return null
+  return end && end !== start ? `${start} – ${end}` : start
 }
+
+const PHASE_INK: Record<TripPhase, string> = {
+  empty: 'var(--ink-3)',
+  upcoming: 'var(--ink-2)',
+  active: 'var(--st-enrt-ink)',
+  done: 'var(--st-done-ink)',
+}
+
+function PhasePill({ phase, label }: { phase: TripPhase; label: string | null }) {
+  if (!label) return null
+  return (
+    <span className="statusbadge" style={{ color: PHASE_INK[phase] }}>
+      <span className="phase-dot" aria-hidden="true" data-phase={phase} />
+      {label}
+    </span>
+  )
+}
+
+function RouteChain({ chain, size = 'md' }: { chain: string[]; size?: 'md' | 'lg' }) {
+  if (!chain.length) return null
+  return (
+    <ol className={`route-chain route-chain--${size}`} aria-label={`Route ${chain.join(' to ')}`}>
+      {chain.map((code, i) => (
+        <li key={`${code}-${i}`}>
+          {i > 0 && <span className="route-chain__arrow" aria-hidden="true">→</span>}
+          <span>{code}</span>
+        </li>
+      ))}
+    </ol>
+  )
+}
+
+/* ---------------------------------------------------------------- list */
+
+function TripCard({ trip }: { trip: TripRead }) {
+  const s = summarizeTrip(trip)
+  const range = dateRange(trip, s)
+  return (
+    <li>
+      <Link to={`/trips/${trip.id}`} className="trip-card">
+        <div className="trip-card__top">
+          <PhasePill phase={s.phase} label={s.phaseLabel} />
+          {range && <span className="trip-card__dates">{range}</span>}
+        </div>
+        <h2 className="trip-card__name">{trip.name}</h2>
+        {s.chain.length ? <RouteChain chain={s.chain} /> : <p className="muted">No flights yet</p>}
+        <div className="trip-card__foot">
+          <span>{s.legs.length} {s.legs.length === 1 ? 'flight' : 'flights'}</span>
+          {s.distanceKm > 0 && <span>{formatDistance(s.distanceKm)}</span>}
+          <IconChevron size={18} className="trip-card__chev" />
+        </div>
+      </Link>
+    </li>
+  )
+}
+
+function TripsEmpty({ onCreate }: { onCreate: () => void }) {
+  return (
+    <div className="trips-empty">
+      <h2>Plan a journey</h2>
+      <p>Group flights into a trip to see the whole route on one map, with layovers and a countdown. Your logbook stays untouched.</p>
+      <button type="button" className="btn" onClick={onCreate}>
+        <IconPlus size={18} /> Create your first trip
+      </button>
+    </div>
+  )
+}
+
+/* ---------------------------------------------------------------- overview */
+
+function LayoverChip({ layover }: { layover: Layover }) {
+  const { kind, minutes, city, inboundDelayed } = layover
+  const duration = minutes !== null ? formatDuration(minutes) : null
+  let text: string
+  let warn = false
+  if (kind === 'check-times') {
+    text = 'Check the times on these two flights'
+    warn = true
+  } else if (kind === 'airport-change') {
+    text = `Change airports${duration ? ` · ${duration} between flights` : ''}`
+    warn = true
+  } else if (kind === 'stay') {
+    const nights = Math.max(1, Math.round((minutes ?? 0) / 1440))
+    text = `${nights} ${nights === 1 ? 'night' : 'nights'} in ${city}`
+  } else if (kind === 'tight') {
+    text = `Tight connection · ${duration} in ${city}${inboundDelayed ? ' · inbound is delayed' : ''}`
+    warn = true
+  } else {
+    text = `${duration} layover in ${city}`
+  }
+  return (
+    <li className="timeline__gap">
+      <span className={`layover${warn ? ' layover--warn' : ''}`}>
+        {warn && (
+          <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" aria-hidden="true">
+            <path d="M12 8v5M12 16.5h.01M10.3 4.5 3.5 17a2 2 0 0 0 1.7 3h13.6a2 2 0 0 0 1.7-3L13.7 4.5a2 2 0 0 0-3.4 0z" />
+          </svg>
+        )}
+        {text}
+      </span>
+    </li>
+  )
+}
+
+function LegCard({
+  leg,
+  selected,
+  editing,
+  removing,
+  onSelect,
+  onRemove,
+}: {
+  leg: TripLeg
+  selected: boolean
+  editing: boolean
+  removing: boolean
+  onSelect: () => void
+  onRemove: () => void
+}) {
+  const f = leg.flight
+  const dep = airportCode(f.departure)
+  const arr = airportCode(f.arrival)
+  const live = f.status === 'enroute' || f.status === 'boarding'
+  const gate = [f.depTerminal, f.depGate].filter(Boolean).join(' / ')
+  return (
+    <li className="timeline__leg">
+      <article className="leg-card" data-selected={selected}>
+        <div className="leg-card__top">
+          <strong>{f.flightCode}</strong>
+          <span className="muted">{f.airline?.name ?? 'Unknown airline'}</span>
+          <StatusBadge status={f.status} />
+        </div>
+
+        <button type="button" className="leg-card__route" aria-pressed={selected} onClick={onSelect} aria-label={`Show ${dep} to ${arr} on the map`}>
+          <span className="leg-card__end">
+            <strong>{dep}</strong>
+            <small>{f.departure.city || f.departure.name}</small>
+          </span>
+          <span className="leg-card__line" aria-hidden="true" />
+          <span className="leg-card__end leg-card__end--arr">
+            <strong>{arr}</strong>
+            <small>{f.arrival.city || f.arrival.name}</small>
+          </span>
+        </button>
+
+        <dl className="leg-card__times">
+          <div>
+            <dt>Departs</dt>
+            <dd>{friendlyDate(f.scheduledDeparture, f.departure.tz)} · {formatLocal(f.scheduledDeparture, f.departure.tz)}</dd>
+          </div>
+          <div>
+            <dt>Arrives</dt>
+            <dd>{formatLocal(f.actualArrival ?? f.scheduledArrival, f.arrival.tz)}</dd>
+          </div>
+          {gate && (
+            <div>
+              <dt>Gate</dt>
+              <dd>{gate}</dd>
+            </div>
+          )}
+        </dl>
+
+        {live && <FlightProgress status={f.status} departure={f.actualDeparture ?? f.scheduledDeparture} arrival={f.actualArrival ?? f.scheduledArrival} />}
+
+        <div className="leg-card__foot">
+          {leg.loggedState === 'planned' && f.status === 'scheduled' && <span className="tag">Planned</span>}
+          <Link to={`/flight/${f.id}`} className="quietlink">Details</Link>
+          {editing && (
+            <button type="button" className="btn-quiet-danger" disabled={removing} onClick={onRemove} aria-label={`Remove ${f.flightCode} from this trip`}>
+              Remove
+            </button>
+          )}
+        </div>
+      </article>
+    </li>
+  )
+}
+
+function SharePanel({ tripId, title, legs }: { tripId: string; title: string; legs: TripLeg[] }) {
+  const [url, setUrl] = useState<string | null>(null)
+  const [copied, setCopied] = useState(false)
+  const share = useMutation({
+    mutationFn: () => api.post<{ token: string; url?: string }>('/api/v1/share/trips', { tripId }),
+    onSuccess: (d) => setUrl(new URL(d.url ?? `/share/trip/${d.token}`, window.location.origin).toString()),
+  })
+  async function copy() {
+    if (!url) return
+    try {
+      await navigator.clipboard.writeText(url)
+      setCopied(true)
+      window.setTimeout(() => setCopied(false), 1800)
+    } catch {
+      /* clipboard unavailable: the field is selectable */
+    }
+  }
+  return (
+    <section className="trip-share" aria-label="Share this trip">
+      <div className="trip-share__head">
+        <h2>Share this trip</h2>
+        <p className="muted">Anyone with the link sees the route and times, never your seat, notes or bookings.</p>
+      </div>
+      <div className="trip-share__row">
+        {url ? (
+          <>
+            <input className="input" readOnly value={url} aria-label="Public link" onFocus={(e) => e.currentTarget.select()} />
+            <button type="button" className="btn" onClick={() => void copy()}>{copied ? 'Copied' : 'Copy link'}</button>
+          </>
+        ) : (
+          <button type="button" className="btn" disabled={share.isPending} onClick={() => share.mutate()}>
+            {share.isPending ? 'Creating…' : 'Create link'}
+          </button>
+        )}
+        <button
+          type="button"
+          className="btn-outline"
+          onClick={() =>
+            exportTripCardPng({
+              title,
+              flights: legs.map(({ flight }) => ({ depCode: airportCode(flight.departure), arrCode: airportCode(flight.arrival), flightCode: flight.flightCode })),
+            })
+          }
+        >
+          Save as image
+        </button>
+      </div>
+      {share.isError && <p role="alert" className="form-error">Could not create a link. Try again.</p>}
+    </section>
+  )
+}
+
+function EditPanel({
+  trip,
+  onDone,
+  onSave,
+  saving,
+  saveError,
+  onDelete,
+}: {
+  trip: TripRead
+  onDone: () => void
+  onSave: (v: { name: string; description: string; startDate: string | null; endDate: string | null }) => void
+  saving: boolean
+  saveError: boolean
+  onDelete: () => void
+}) {
+  const [name, setName] = useState(trip.name)
+  const [description, setDescription] = useState(trip.description ?? '')
+  const [start, setStart] = useState(trip.startDate?.slice(0, 10) ?? '')
+  const [end, setEnd] = useState(trip.endDate?.slice(0, 10) ?? '')
+  return (
+    <form
+      className="trip-edit"
+      onSubmit={(e) => {
+        e.preventDefault()
+        onSave({
+          name,
+          description,
+          startDate: start ? new Date(`${start}T00:00:00Z`).toISOString() : null,
+          endDate: end ? new Date(`${end}T23:59:00Z`).toISOString() : null,
+        })
+      }}
+    >
+      <div className="trip-edit__head">
+        <h2>Edit trip</h2>
+        <div className="trip-edit__actions">
+          <button type="button" className="btn-ghost" onClick={onDone}>Cancel</button>
+          <button type="submit" className="btn" disabled={saving || !name.trim()}>{saving ? 'Saving…' : 'Save'}</button>
+        </div>
+      </div>
+      <div className="trip-edit__grid">
+        <div className="field trip-edit__wide">
+          <label htmlFor="trip-edit-name">Name</label>
+          <input id="trip-edit-name" className="input" required maxLength={120} value={name} onChange={(e) => setName(e.target.value)} />
+        </div>
+        <div className="field trip-edit__wide">
+          <label htmlFor="trip-edit-description">Notes</label>
+          <textarea id="trip-edit-description" className="textarea" maxLength={2000} value={description} onChange={(e) => setDescription(e.target.value)} />
+        </div>
+        <div className="field">
+          <label htmlFor="trip-edit-start">Start date</label>
+          <input id="trip-edit-start" className="input" type="date" value={start} onChange={(e) => setStart(e.target.value)} />
+        </div>
+        <div className="field">
+          <label htmlFor="trip-edit-end">End date</label>
+          <input id="trip-edit-end" className="input" type="date" value={end} onChange={(e) => setEnd(e.target.value)} />
+        </div>
+      </div>
+      {saveError && <p role="alert" className="form-error">Couldn’t save. Your edits are still here.</p>}
+      <div className="trip-edit__danger">
+        <button type="button" className="btn-quiet-danger" onClick={onDelete}>Delete trip…</button>
+        <span className="muted">Flights stay in your logbook.</span>
+      </div>
+    </form>
+  )
+}
+
+function AddFlights({ available, onAdd, adding }: { available: TripLogbook['flown']; onAdd: (id: string) => void; adding: boolean }) {
+  return (
+    <section className="trip-add" aria-label="Add flights from your logbook">
+      <h2>Add from your logbook</h2>
+      {available.length ? (
+        <ul>
+          {available.map((entry) => (
+            <li key={entry.id}>
+              <span>
+                <strong>{entry.flight.flightCode}</strong>
+                <small>{airportCode(entry.flight.departure)} → {airportCode(entry.flight.arrival)} · {friendlyDate(entry.flight.scheduledDeparture, entry.flight.departure.tz)}</small>
+              </span>
+              <button type="button" className="btn-outline btn--sm" disabled={adding} onClick={() => onAdd(entry.id)}>Add</button>
+            </li>
+          ))}
+        </ul>
+      ) : (
+        <p className="muted">Every flight in your logbook is already in this trip.</p>
+      )}
+    </section>
+  )
+}
+
+/* ---------------------------------------------------------------- page */
 
 export function TripsPage() {
   const { tripId } = useParams()
+  const [searchParams, setSearchParams] = useSearchParams()
+  const editing = searchParams.get('edit') === '1'
   const navigate = useNavigate()
   const queryClient = useQueryClient()
+  const createDialog = useRef<HTMLDialogElement>(null)
+  const deleteDialog = useRef<HTMLDialogElement>(null)
+  const [selectedLeg, setSelectedLeg] = useState<string | null>(null)
+  const [form, setForm] = useState({ name: '', description: '', startDate: '', endDate: '' })
+  const [formError, setFormError] = useState<string | null>(null)
+
   const trips = useQuery({ queryKey: ['trips'], queryFn: () => api.get<{ trips: TripRead[] }>('/api/v1/trips') })
-  const logbook = useQuery({ queryKey: ['logbook', '', ''], queryFn: () => api.get<TripLogbook>('/api/v1/logbook') })
+  // The logbook only feeds the "add flights" list, so it never blocks the page.
+  const logbook = useQuery({ queryKey: ['logbook', '', ''], queryFn: () => api.get<TripLogbook>('/api/v1/logbook'), enabled: !!tripId && editing })
+
   const invalidate = () => {
     void queryClient.invalidateQueries({ queryKey: ['trips'] })
     void queryClient.invalidateQueries({ queryKey: ['logbook'] })
   }
-  const create = useMutation({ mutationFn: (value: { name: string; description?: string; startDate?: string; endDate?: string }) => api.post<{ trip: TripRead }>('/api/v1/trips', value), onSuccess: invalidate })
+  const create = useMutation({ mutationFn: (v: NewTrip) => api.post<{ trip: TripRead }>('/api/v1/trips', v), onSuccess: invalidate })
   const remove = useMutation({ mutationFn: (id: string) => api.delete(`/api/v1/trips/${id}`), onSuccess: () => { invalidate(); navigate('/trips', { replace: true }) } })
-  const attach = useMutation({ mutationFn: ({ trip, userFlight }: { trip: string; userFlight: string }) => api.put(`/api/v1/trips/${trip}/flights/${userFlight}`), onSuccess: invalidate })
-  const detach = useMutation({ mutationFn: ({ trip, userFlight }: { trip: string; userFlight: string }) => api.delete(`/api/v1/trips/${trip}/flights/${userFlight}`), onSuccess: invalidate })
-  const updateTrip = useMutation({ mutationFn: (value: { id: string; name: string; description: string; startDate: string | null; endDate: string | null }) => api.patch(`/api/v1/trips/${value.id}`, value), onSuccess: invalidate })
-  const createTripShare = useMutation({ mutationFn: (tripId: string) => api.post<{ token: string; url: string }>('/api/v1/share/trips', { tripId }), onSuccess: (data) => setShareToken(data.token) })
-  const [name, setName] = useState('')
-  const [description, setDescription] = useState('')
-  const [startDate, setStartDate] = useState('')
-  const [endDate, setEndDate] = useState('')
-  const [error, setError] = useState<string | null>(null)
-  const [editName, setEditName] = useState('')
-  const [editDescription, setEditDescription] = useState('')
-  const [editStart, setEditStart] = useState('')
-  const [editEnd, setEditEnd] = useState('')
-  const [shareToken, setShareToken] = useState<string | null>(null)
-  const deleteDialog = useRef<HTMLDialogElement>(null)
-  const selected = trips.data?.trips.find((trip) => trip.id === tripId)
+  const attach = useMutation({ mutationFn: (v: { trip: string; userFlight: string }) => api.put(`/api/v1/trips/${v.trip}/flights/${v.userFlight}`), onSuccess: invalidate })
+  const detach = useMutation({ mutationFn: (v: { trip: string; userFlight: string }) => api.delete(`/api/v1/trips/${v.trip}/flights/${v.userFlight}`), onSuccess: invalidate })
+  const update = useMutation({ mutationFn: (v: { id: string; name: string; description: string; startDate: string | null; endDate: string | null }) => api.patch(`/api/v1/trips/${v.id}`, v), onSuccess: invalidate })
+
+  const selected = trips.data?.trips.find((t) => t.id === tripId)
+  const summary = selected ? summarizeTrip(selected) : null
 
   useEffect(() => {
-    if (!selected) return
-    setEditName(selected.name)
-    setEditDescription(selected.description ?? '')
-    setEditStart(selected.startDate?.slice(0, 10) ?? '')
-    setEditEnd(selected.endDate?.slice(0, 10) ?? '')
-  }, [selected?.id]) // eslint-disable-line react-hooks/exhaustive-deps
+    document.title = `${selected?.name ?? 'Trips'} · Gfloge`
+  }, [selected?.name])
+  useEffect(() => {
+    setSelectedLeg(null)
+  }, [tripId])
 
-  async function submit(event: FormEvent) {
+  async function submitNew(event: FormEvent) {
     event.preventDefault()
-    setError(null)
-    if (!name.trim()) { setError('Enter a trip name.'); return }
+    setFormError(null)
+    if (!form.name.trim()) return setFormError('Give the trip a name.')
     try {
-      await create.mutateAsync({
-        name: name.trim(),
-        description,
-        startDate: startDate ? new Date(`${startDate}T00:00:00Z`).toISOString() : undefined,
-        endDate: endDate ? new Date(`${endDate}T23:59:00Z`).toISOString() : undefined,
+      const { trip } = await create.mutateAsync({
+        name: form.name.trim(),
+        description: form.description,
+        startDate: form.startDate ? new Date(`${form.startDate}T00:00:00Z`).toISOString() : undefined,
+        endDate: form.endDate ? new Date(`${form.endDate}T23:59:00Z`).toISOString() : undefined,
       })
-      setName('')
-      setDescription('')
-      setStartDate('')
-      setEndDate('')
+      createDialog.current?.close()
+      setForm({ name: '', description: '', startDate: '', endDate: '' })
+      navigate(`/trips/${trip.id}?edit=1`)
     } catch (cause) {
-      setError(cause instanceof Error ? cause.message : 'Could not create the trip.')
+      setFormError(cause instanceof Error ? cause.message : 'Could not create the trip.')
     }
   }
 
-  if (trips.isPending || logbook.isPending) return <div className="page trips-page" aria-busy="true"><p role="status">Loading your itineraries…</p></div>
-  if (trips.isError || logbook.isError) {
+  const createDialogEl = (
+    <dialog ref={createDialog} className="confirm-dialog" aria-labelledby="new-trip-title">
+      <form onSubmit={(e) => void submitNew(e)} className="trip-new">
+        <h2 id="new-trip-title">New trip</h2>
+        <div className="field">
+          <label htmlFor="trip-name">Name</label>
+          <input id="trip-name" className="input" required maxLength={120} value={form.name} onChange={(e) => setForm({ ...form, name: e.target.value })} placeholder="Singapore work trip" />
+        </div>
+        <div className="trip-new__dates">
+          <div className="field">
+            <label htmlFor="trip-start">Start <span className="muted">(optional)</span></label>
+            <input id="trip-start" type="date" className="input" value={form.startDate} onChange={(e) => setForm({ ...form, startDate: e.target.value })} />
+          </div>
+          <div className="field">
+            <label htmlFor="trip-end">End <span className="muted">(optional)</span></label>
+            <input id="trip-end" type="date" className="input" value={form.endDate} onChange={(e) => setForm({ ...form, endDate: e.target.value })} />
+          </div>
+        </div>
+        {formError && <p className="form-error" role="alert">{formError}</p>}
+        <div className="actions-row">
+          <button type="button" className="btn-ghost" onClick={() => createDialog.current?.close()}>Cancel</button>
+          <button type="submit" className="btn" disabled={create.isPending}>{create.isPending ? 'Creating…' : 'Create trip'}</button>
+        </div>
+      </form>
+    </dialog>
+  )
+
+  if (trips.isPending) {
+    return (
+      <div className="page trips-page" aria-busy="true">
+        <span className="sr-only" role="status">Loading trips</span>
+        <div className="skeleton skeleton--title" />
+        <div className="trip-grid">
+          {[0, 1, 2].map((i) => <div key={i} className="skeleton skeleton--card" />)}
+        </div>
+      </div>
+    )
+  }
+  if (trips.isError) {
     return (
       <div className="page trips-page">
-        <h1>Itineraries</h1>
-        <p role="alert" className="form-error">Trips could not be loaded. Check your connection and retry.</p>
-        <button className="btn-outline" type="button" onClick={() => { void trips.refetch(); void logbook.refetch() }}>Retry</button>
+        <h1>Trips</h1>
+        <p role="alert" className="form-error">Trips couldn’t be loaded.</p>
+        <button className="btn-outline" type="button" onClick={() => void trips.refetch()}>Try again</button>
       </div>
     )
   }
   if (tripId && !selected) {
-    return <div className="page trips-page"><h1>Trip not found</h1><p className="form-note">This itinerary may have been deleted.</p><Link to="/trips" className="btn-outline">Back to itineraries</Link></div>
+    return (
+      <div className="page trips-page">
+        <h1>Trip not found</h1>
+        <p className="muted">It may have been deleted.</p>
+        <Link to="/trips" className="btn-outline">Back to trips</Link>
+      </div>
+    )
   }
 
-  const availableFlights = [...logbook.data.flown, ...logbook.data.planned, ...logbook.data.manual]
+  /* ---- list ---- */
+  if (!selected || !summary) {
+    const list = trips.data.trips
+    return (
+      <div className="page trips-page">
+        <header className="pagehead">
+          <div>
+            <h1>Trips</h1>
+            <p className="pagehead__lede">Group flights into journeys: one route, one map, one countdown.</p>
+          </div>
+          {list.length > 0 && (
+            <button type="button" className="btn" onClick={() => createDialog.current?.showModal()}>
+              <IconPlus size={18} /> New trip
+            </button>
+          )}
+        </header>
+        {list.length ? (
+          <ul className="trip-grid">{list.map((t) => <TripCard key={t.id} trip={t} />)}</ul>
+        ) : (
+          <TripsEmpty onCreate={() => createDialog.current?.showModal()} />
+        )}
+        {createDialogEl}
+      </div>
+    )
+  }
+
+  /* ---- overview ---- */
+  const range = dateRange(selected, summary)
+  const inTrip = new Set(selected.flights.map((f) => f.id))
+  const available = logbook.data ? [...logbook.data.planned, ...logbook.data.flown, ...logbook.data.manual].filter((e) => !inTrip.has(e.id)) : []
+  const activeLeg = selectedLeg ?? summary.nextLegId
+  const stats = [
+    `${summary.legs.length} ${summary.legs.length === 1 ? 'flight' : 'flights'}`,
+    summary.distanceKm > 0 ? formatDistance(summary.distanceKm) : null,
+    summary.daysAway ? `${summary.daysAway} ${summary.daysAway === 1 ? 'day' : 'days'} away` : null,
+  ].filter(Boolean) as string[]
 
   return (
     <div className="page trips-page">
-      {tripId && <button type="button" className="back-link" onClick={() => navigate(-1)}>← Back</button>}
-      <header className="trips-heading">
-        <div>
-          <p className="eyebrow">Itineraries</p>
-          <h1>{selected?.name ?? 'Trips'}</h1>
-          <p>{selected ? `${selected.flights.length} ${selected.flights.length === 1 ? 'flight' : 'flights'} in this itinerary` : 'Group saved flights into journeys without changing your logbook.'}</p>
+      <header className="trip-hero">
+        <Link to="/trips" className="back-link">← Trips</Link>
+        <div className="trip-hero__body">
+          <div className="trip-hero__text">
+            <div className="trip-hero__meta">
+              <PhasePill phase={summary.phase} label={summary.phaseLabel} />
+              {range && <span className="muted">{range}</span>}
+            </div>
+            <h1>{selected.name}</h1>
+            {selected.description && <p className="pagehead__lede">{selected.description}</p>}
+            <RouteChain chain={summary.chain} size="lg" />
+            {stats.length > 0 && (
+              <ul className="chiprow" aria-label="Trip totals">
+                {stats.map((s) => <li key={s}>{s}</li>)}
+              </ul>
+            )}
+          </div>
+          {!editing && (
+            <div className="pagehead__actions">
+              <button type="button" className="btn-outline" onClick={() => setSearchParams({ edit: '1' })}>Edit</button>
+            </div>
+          )}
         </div>
-        {selected && <Link className="btn-outline" to="/trips">All trips <IconChevron size={16} /></Link>}
       </header>
 
-      <div className="trips-workspace">
-        <aside className="trips-index" aria-labelledby="trip-index-title">
-          <header><h2 id="trip-index-title">Itinerary index</h2><span>{trips.data.trips.length}</span></header>
-          {trips.data.trips.length ? (
-            <ul>
-              {trips.data.trips.map((trip) => (
-                <li key={trip.id}>
-                  <Link to={`/trips/${trip.id}`} aria-current={selected?.id === trip.id ? 'page' : undefined}>
-                    <strong>{trip.name}</strong>
-                    <small>{trip.flights.length} flights · {trip.startDate ? formatDate(trip.startDate, 'UTC') : 'Dates flexible'}</small>
-                    <IconChevron size={16} />
-                  </Link>
-                </li>
-              ))}
-            </ul>
-          ) : <p className="trips-index__empty">No itinerary groups yet.</p>}
-        </aside>
+      {editing && (
+        <EditPanel
+          key={selected.id}
+          trip={selected}
+          onDone={() => setSearchParams({})}
+          onSave={(v) => update.mutate({ id: selected.id, ...v }, { onSuccess: () => setSearchParams({}) })}
+          saving={update.isPending}
+          saveError={update.isError}
+          onDelete={() => deleteDialog.current?.showModal()}
+        />
+      )}
 
-        <section className="trip-stage" aria-label={selected ? `${selected.name} itinerary` : 'Create itinerary'}>
-          {selected ? (
-            <>
-              <form className="trip-edit-form" onSubmit={(event) => {
-                event.preventDefault()
-                updateTrip.mutate({
-                  id: selected.id,
-                  name: editName,
-                  description: editDescription,
-                  startDate: editStart ? new Date(`${editStart}T00:00:00Z`).toISOString() : null,
-                  endDate: editEnd ? new Date(`${editEnd}T23:59:00Z`).toISOString() : null,
-                })
-              }}>
-                <div className="trip-form-heading"><h2>Itinerary details</h2><button className="btn-outline" type="submit" disabled={updateTrip.isPending}>{updateTrip.isPending ? 'Saving…' : 'Save details'}</button></div>
-                <div className="trip-edit-form__fields">
-                  <div className="field"><label htmlFor="trip-edit-name">Trip name</label><input id="trip-edit-name" className="input" required maxLength={120} value={editName} onChange={(event) => setEditName(event.target.value)} /></div>
-                  <div className="field"><label htmlFor="trip-edit-description">Description</label><textarea id="trip-edit-description" className="textarea" maxLength={2000} value={editDescription} onChange={(event) => setEditDescription(event.target.value)} /></div>
-                  <div className="field-pair">
-                    <div className="field"><label htmlFor="trip-edit-start">Start date</label><input id="trip-edit-start" className="input" type="date" value={editStart} onChange={(event) => setEditStart(event.target.value)} /></div>
-                    <div className="field"><label htmlFor="trip-edit-end">End date</label><input id="trip-edit-end" className="input" type="date" value={editEnd} onChange={(event) => setEditEnd(event.target.value)} /></div>
-                  </div>
-                </div>
-                {updateTrip.isError && <p role="alert" className="form-error">Could not save itinerary details. Your edits are still here.</p>}
-              </form>
+      {summary.legs.length ? (
+        <div className="trip-layout">
+          <ol className="timeline" aria-label="Flights in this trip">
+            {summary.legs.flatMap((leg, i) => {
+              const prev = summary.legs[i - 1]
+              const items = []
+              if (prev) items.push(<LayoverChip key={`gap-${leg.id}`} layover={describeLayover(prev, leg, layoverMinutes, isTightLayover)} />)
+              items.push(
+                <LegCard
+                  key={leg.id}
+                  leg={leg}
+                  selected={leg.id === activeLeg}
+                  editing={editing}
+                  removing={detach.isPending}
+                  onSelect={() => setSelectedLeg(leg.id)}
+                  onRemove={() => detach.mutate({ trip: selected.id, userFlight: leg.id })}
+                />,
+              )
+              return items
+            })}
+          </ol>
 
-              <section className="trip-itinerary-section" aria-labelledby="trip-itinerary-title">
-                <header className="trip-form-heading"><h2 id="trip-itinerary-title">Itinerary timeline</h2><span>{selected.flights.length} legs</span></header>
-                {selected.flights.length ? (
-                  <>
-                    <ol className="trip-itinerary">
-                      {selected.flights
-                        .slice()
-                        .sort((a, b) => a.flight.scheduledDeparture.localeCompare(b.flight.scheduledDeparture))
-                        .map((item, index, list) => {
-                          const next = list[index + 1]
-                          const depCode = item.flight.departure.iata ?? item.flight.departure.icao
-                          const arrCode = item.flight.arrival.iata ?? item.flight.arrival.icao
-                          const planned = item.loggedState === 'planned'
-                          const completed = item.flight.status === 'arrived'
-                          const cancelled = item.flight.status === 'cancelled' || item.flight.cancelled
-                          const statusLabel = cancelled ? 'Cancelled' : completed ? 'Completed' : planned ? 'Planned (unconfirmed)' : 'Confirmed'
-                          const connection = next ? connectionInfo(item.flight, next.flight) : null
-                          return (
-                            <li key={item.id}>
-                              <span className="trip-itinerary__number">{String(index + 1).padStart(2, '0')}</span>
-                              <div className="trip-itinerary__route">
-                                <Link to={`/flight/${item.flight.id}`}>
-                                  <strong>{depCode} <span>→</span> {arrCode}</strong>
-                                </Link>
-                                <small>{item.flight.flightCode} · {formatDate(item.flight.scheduledDeparture, item.flight.departure.tz)} · {item.flight.airline?.name ?? 'Unknown airline'}</small>
-                                <div className="trip-itinerary__times">
-                                  <span>Departs {formatLocal(item.flight.scheduledDeparture, item.flight.departure.tz)} {depCode} local</span>
-                                  <span>Arrives {formatLocal(item.flight.actualArrival ?? item.flight.scheduledArrival, item.flight.arrival.tz)} {arrCode} local</span>
-                                  {item.flight.depTerminal || item.flight.depGate ? <span>Departure gate {[item.flight.depTerminal, item.flight.depGate].filter(Boolean).join(' / ')}</span> : null}
-                                  {item.flight.arrTerminal || item.flight.arrGate ? <span>Arrival gate {[item.flight.arrTerminal, item.flight.arrGate].filter(Boolean).join(' / ')}</span> : null}
-                                </div>
-                                <div className="trip-itinerary__status"><StatusBadge status={item.flight.status} /> <span className="form-note">{statusLabel}</span></div>
-                                {connection && (
-                                  <p className={`form-note${connection.warning ? ' form-error' : ''}`} role={connection.warning ? 'alert' : 'status'}>
-                                    {connection.text}
-                                  </p>
-                                )}
-                              </div>
-                              <button type="button" className="btn-quiet-danger" disabled={detach.isPending} onClick={() => detach.mutate({ trip: selected.id, userFlight: item.id })} aria-label={`Remove ${item.flight.flightCode} from ${selected.name}`}>Remove</button>
-                            </li>
-                          )
-                        })}
-                    </ol>
-                    <section className="trip-map" aria-label="Trip route map">
-                      <h3>Route map</h3>
-                      <AtlasSurface
-                        routes={selected.flights
-                          .slice()
-                          .sort((a, b) => a.flight.scheduledDeparture.localeCompare(b.flight.scheduledDeparture))
-                          .map((item) => ({
-                            id: item.id,
-                            code: item.flight.flightCode,
-                            from: toAtlasAirport(item.flight.departure),
-                            to: toAtlasAirport(item.flight.arrival),
-                          }))}
-                        airports={[]}
-                        heading="Trip route"
-                        countLabel={`${selected.flights.length} legs`}
-                        footerLabel="Great-circle routes from saved flights"
-                      />
-                    </section>
-                  </>
-                ) : (
-                  <p className="trip-itinerary__empty">This itinerary has no flights yet. Add a saved flight from your logbook below.</p>
-                )}
-                {detach.isError && <p role="alert" className="form-error">Could not remove that flight from the itinerary. It remains in your logbook.</p>}
-              </section>
+          <aside className="trip-layout__map">
+            <AtlasSurface
+              routes={summary.legs.map((l) => ({ id: l.id, code: l.flight.flightCode, from: toAtlasAirport(l.flight.departure), to: toAtlasAirport(l.flight.arrival) }))}
+              airports={[]}
+              selectedRouteId={activeLeg}
+              heading="Trip route"
+              countLabel={`${summary.legs.length} ${summary.legs.length === 1 ? 'leg' : 'legs'}`}
+              footerLabel="Great-circle routes"
+            />
+          </aside>
+        </div>
+      ) : (
+        <div className="trips-empty">
+          <h2>No flights in this trip yet</h2>
+          <p>Add flights from your logbook to see the route, layovers and countdown.</p>
+          {!editing && <button type="button" className="btn" onClick={() => setSearchParams({ edit: '1' })}>Add flights</button>}
+        </div>
+      )}
 
-              <section className="trip-attach" aria-labelledby="trip-attach-title">
-                <header className="trip-form-heading"><h2 id="trip-attach-title">Add from logbook</h2><span>{availableFlights.filter((entry) => !selected.flights.some((flight) => flight.id === entry.id)).length} available</span></header>
-                <ul className="trip-picker">
-                  {availableFlights.filter((entry) => !selected.flights.some((flight) => flight.id === entry.id)).map((entry) => (
-                    <li key={entry.id}>
-                      <span><strong>{entry.flight.flightCode}</strong><small>{entry.flight.departure.iata} → {entry.flight.arrival.iata} · {formatDate(entry.flight.scheduledDeparture, entry.flight.departure.tz)}</small></span>
-                      <button className="btn-outline" type="button" disabled={attach.isPending} onClick={() => attach.mutate({ trip: selected.id, userFlight: entry.id })}>Add to trip</button>
-                    </li>
-                  ))}
-                </ul>
-                {availableFlights.length === selected.flights.length && <p className="form-note">Every saved flight is already in this trip.</p>}
-                {attach.isError && <p role="alert" className="form-error">Could not add that flight. It remains in your logbook.</p>}
-              </section>
+      {editing && (
+        <AddFlights
+          available={available}
+          adding={attach.isPending}
+          onAdd={(id) => attach.mutate({ trip: selected.id, userFlight: id })}
+        />
+      )}
+      {(detach.isError || attach.isError) && <p role="alert" className="form-error">That change didn’t go through. Your logbook is unchanged.</p>}
 
-              <section className="trip-share" aria-labelledby="trip-share-title">
-                <header className="trip-form-heading"><h2 id="trip-share-title">Sharing</h2></header>
-                <p className="form-note">Create a read-only public link for this itinerary.</p>
-                <button type="button" className="btn-outline" disabled={createTripShare.isPending} onClick={() => selected && createTripShare.mutate(selected.id)}>
-                  {createTripShare.isPending ? 'Creating…' : 'Create share link'}
-                </button>
-                {shareToken && <p className="form-note" role="status">Share URL: /share/trip/{shareToken}</p>}
-                <button type="button" className="btn-outline" style={{ marginTop: 'var(--space-2xs)' }} onClick={() => selected && exportTripCardPng({
-                  title: selected.name,
-                  flights: selected.flights.map((item) => ({
-                    depCode: (item.flight.departure.iata ?? item.flight.departure.icao) ?? '',
-                    arrCode: (item.flight.arrival.iata ?? item.flight.arrival.icao) ?? '',
-                    flightCode: item.flight.flightCode,
-                  })),
-                })}>Export PNG</button>
-              </section>
-              <div className="trip-danger-zone">
-                <p>Deleting this group will not remove any flight from your logbook.</p>
-                <button type="button" className="btn-danger" onClick={() => deleteDialog.current?.showModal()}>Delete itinerary</button>
-              </div>
-              <dialog ref={deleteDialog} aria-labelledby="delete-trip-title" className="confirm-dialog">
-                <h2 id="delete-trip-title">Delete “{selected.name}”?</h2>
-                <p>The itinerary group will be removed. Its flights and personal logbook details stay intact.</p>
-                <div className="actions-row"><button type="button" className="btn-outline" onClick={() => deleteDialog.current?.close()}>Keep itinerary</button><button type="button" className="btn-danger" disabled={remove.isPending} onClick={() => { remove.mutate(selected.id); deleteDialog.current?.close() }}>Delete itinerary</button></div>
-              </dialog>
-            </>
-          ) : (
-            <>
-              <section className="trip-stage-intro">
-                <p className="eyebrow">Build a journey</p>
-                <h2>Keep related flights together.</h2>
-                <p>An itinerary is only a grouping. Add flown or planned logbook entries to it, and your flight records stay unchanged.</p>
-              </section>
-              <form className="trip-create-form" onSubmit={(event) => void submit(event)}>
-                <div className="trip-form-heading"><h2>New itinerary</h2></div>
-                <div className="field"><label htmlFor="trip-name">Trip name</label><input id="trip-name" className="input" required maxLength={120} value={name} onChange={(event) => setName(event.target.value)} placeholder="A name you’ll recognize" /></div>
-                <div className="field"><label htmlFor="trip-description">Description <span className="form-note">Optional</span></label><textarea id="trip-description" className="textarea" maxLength={2000} value={description} onChange={(event) => setDescription(event.target.value)} /></div>
-                <div className="field-pair">
-                  <div className="field"><label htmlFor="trip-start">Start date <span className="form-note">Optional</span></label><input id="trip-start" type="date" className="input" value={startDate} onChange={(event) => setStartDate(event.target.value)} /></div>
-                  <div className="field"><label htmlFor="trip-end">End date <span className="form-note">Optional</span></label><input id="trip-end" type="date" className="input" value={endDate} onChange={(event) => setEndDate(event.target.value)} /></div>
-                </div>
-                {error && <p className="form-error" role="alert">{error}</p>}
-                <button className="btn" type="submit" disabled={create.isPending}>{create.isPending ? 'Creating…' : 'Create itinerary'}</button>
-              </form>
-            </>
-          )}
-        </section>
-      </div>
+      {summary.legs.length > 0 && !editing && <SharePanel tripId={selected.id} title={selected.name} legs={summary.legs} />}
+
+      <dialog ref={deleteDialog} aria-labelledby="delete-trip-title" className="confirm-dialog">
+        <h2 id="delete-trip-title">Delete “{selected.name}”?</h2>
+        <p>The trip is removed. Its flights stay in your logbook.</p>
+        <div className="actions-row">
+          <button type="button" className="btn-ghost" onClick={() => deleteDialog.current?.close()}>Keep trip</button>
+          <button type="button" className="btn-danger" disabled={remove.isPending} onClick={() => { remove.mutate(selected.id); deleteDialog.current?.close() }}>Delete trip</button>
+        </div>
+      </dialog>
     </div>
   )
 }

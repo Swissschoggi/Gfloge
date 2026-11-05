@@ -441,3 +441,18 @@ export function diagnoseFlight(flight: FlightRead): Diagnostic[] {
   if (!flight.aircraft) out.push({ severity: 'warning', code: 'missing_aircraft', message: 'Aircraft details are unavailable.' })
   return out
 }
+
+// ===== Trip layover helpers =====
+
+export function layoverMinutes(arrivalIso: string, nextDepartureIso: string): number {
+  const a = Date.parse(arrivalIso)
+  const b = Date.parse(nextDepartureIso)
+  if (!Number.isFinite(a) || !Number.isFinite(b)) return NaN
+  return Math.round((b - a) / 60000)
+}
+
+export function isTightLayover(minutes: number, domestic: boolean): boolean {
+  if (!Number.isFinite(minutes)) return false
+  const threshold = domestic ? 60 : 90
+  return minutes < threshold
+}

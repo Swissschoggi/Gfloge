@@ -11,6 +11,7 @@ import './styles/base.css'
 import './styles/shell.css'
 import './styles/map.css'
 import './styles/screens.css'
+import './styles/trips.css'
 
 const queryClient = new QueryClient({
   defaultOptions: {
@@ -20,7 +21,7 @@ const queryClient = new QueryClient({
 
 if ('serviceWorker' in navigator) {
   window.addEventListener('load', () => {
-    navigator.serviceWorker.register('/sw.js').catch(() => {})
+    navigator.serviceWorker.register('/sw.js').catch(() => { })
   })
 }
 

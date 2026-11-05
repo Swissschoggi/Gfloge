@@ -21,16 +21,14 @@ export function ActivityFeed({ flightId, limit = 8 }: Props) {
         return (
           <li key={a.id}>
             {a.flightId ? (
-              <Link to={`/flight/${a.flightId}`} className="activity-card">
-                <span className={`activity-card__accent${critical ? ' activity-card__accent--critical' : ''}`} aria-hidden="true" />
+              <Link to={`/flight/${a.flightId}`} className={`activity-card${critical ? " activity-card--critical" : ""}`}>
                 <span className="activity-card__body">
                   <span className="activity-card__headline">{a.headline}</span>
                   <span className="activity-card__meta">{a.flightCode ?? ''} · {relativeTime(a.createdAt)}</span>
                 </span>
               </Link>
             ) : (
-              <div className="activity-card">
-                <span className={`activity-card__accent${critical ? ' activity-card__accent--critical' : ''}`} aria-hidden="true" />
+              <div className={`activity-card${critical ? " activity-card--critical" : ""}`}>
                 <span className="activity-card__body">
                   <span className="activity-card__headline">{a.headline}</span>
                   <span className="activity-card__meta">{relativeTime(a.createdAt)}</span>

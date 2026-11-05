@@ -9,6 +9,7 @@ import {
   providerCredentials,
   trips,
   userFlights,
+  refCountries,
 } from '@gfloge/db'
 import type { Db } from '@gfloge/db'
 import {
@@ -184,6 +185,13 @@ export function registerDomainRoutes(app: FastifyInstance): void {
   app.get('/api/v1/airlines', { config: { rateLimit: { max: 90, timeWindow: 60_000 } } }, async (req) => {
     const q = String((req.query as Record<string, string | undefined>)['q'] ?? '').trim()
     return { results: await searchAirlines(db, q, 100) }
+  })
+
+  app.get('/api/v1/reference/countries', { config: { rateLimit: { max: 90, timeWindow: 60_000 } } }, async (req) => {
+    const q = String((req.query as Record<string, string | undefined>)['q'] ?? '').trim().toLowerCase()
+    const rows = await db.select().from(refCountries)
+    const filtered = q ? rows.filter((c) => c.name.toLowerCase().includes(q) || c.alpha2.toLowerCase().includes(q) || (c.alpha3 ?? '').toLowerCase().includes(q)) : rows
+    return { results: filtered.slice(0, 30).map((c) => ({ alpha2: c.alpha2, alpha3: c.alpha3, name: c.name })) }
   })
 
   // ----- Outcome-aware flight search -----
