@@ -43,6 +43,27 @@
       "when": 1793693313846,
       "tag": "0005_old_forgotten_one",
       "breakpoints": true
+    },
+    {
+      "idx": 6,
+      "version": "7",
+      "when": 1793813197317,
+      "tag": "0006_same_morbius",
+      "breakpoints": true
+    },
+    {
+      "idx": 7,
+      "version": "7",
+      "when": 1793824610718,
+      "tag": "0007_puzzling_mockingbird",
+      "breakpoints": true
+    },
+    {
+      "idx": 8,
+      "version": "7",
+      "when": 1793825507254,
+      "tag": "0008_omniscient_roland_deschain",
+      "breakpoints": true
     }
   ]
 }

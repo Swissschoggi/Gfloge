@@ -352,7 +352,7 @@ export const preferencesSchema = z.object({
   units: z.enum(['km', 'mi']).optional(),
   timezoneDisplay: z.enum(['airport', 'local', 'utc']).optional(),
   themeOverride: z.enum(['system', 'day', 'night']).optional(),
-  notificationPrefs: z.object({ delays: z.boolean(), gates: z.boolean(), cancellations: z.boolean() }).optional(),
+  notificationPrefs: z.object({ delays: z.boolean().optional(), gates: z.boolean().optional(), cancellations: z.boolean().optional(), arrival: z.boolean().optional(), terminal: z.boolean().optional(), diversion: z.boolean().optional(), reminder24h: z.boolean().optional(), reminder3h: z.boolean().optional() }).optional(),
 })
 
 export const changePasswordSchema = z.object({
@@ -369,4 +369,90 @@ export type ProviderStatus = {
   attribution: string
   credentialHint: string | null
   implemented?: boolean
+}
+
+// ===== Flight discovery (SerpApi Google Flights offers) =====
+
+export type FlightDiscoveryAirport = {
+  name?: string
+  id?: string
+  time?: string
+}
+
+export type FlightDiscoveryLeg = {
+  departure_airport?: FlightDiscoveryAirport
+  arrival_airport?: FlightDiscoveryAirport
+  duration?: number
+  airplane?: string
+  airline?: string
+  airline_logo?: string
+  flight_number?: string
+  legroom?: string
+  extensions?: string[]
+  ticket_also_sold_by?: string[]
+  overnight?: boolean
+}
+
+export type FlightDiscoveryOffer = {
+  flights?: FlightDiscoveryLeg[]
+  layovers?: Array<{ duration?: number; name?: string; id?: string; overnight?: boolean }>
+  total_duration?: number
+  carbon_emissions?: { this_flight?: number; typical_for_this_route?: number; difference_percent?: number }
+  price?: number
+  type?: string
+  airline_logo?: string
+  departure_token?: string
+  booking_token?: string
+}
+
+export type FlightDiscoveryResult = {
+  retrievedAt?: string
+  best_flights?: FlightDiscoveryOffer[]
+  other_flights?: FlightDiscoveryOffer[]
+  price_insights?: { lowest_price?: number; price_level?: string; typical_price_range?: number[] }
+  search_metadata?: { status?: string; created_at?: string }
+  error?: string
+}
+
+// ===== Flight diagnostics =====
+
+export type Diagnostic = { severity: 'info' | 'warning' | 'error'; code: string; message: string }
+
+export function diagnoseFlight(flight: FlightRead): Diagnostic[] {
+  const out: Diagnostic[] = []
+  const dep = new Date(flight.scheduledDeparture)
+  const arr = new Date(flight.scheduledArrival)
+  if (arr.getTime() < dep.getTime()) out.push({ severity: 'error', code: 'arrival_before_departure', message: 'Scheduled arrival is before scheduled departure.' })
+  if (flight.actualArrival && !flight.actualDeparture) out.push({ severity: 'warning', code: 'actual_arrival_without_departure', message: 'Actual arrival is recorded but actual departure is missing.' })
+  if (flight.actualDeparture && flight.actualArrival) {
+    const a = new Date(flight.actualDeparture); const b = new Date(flight.actualArrival)
+    if (b.getTime() < a.getTime()) out.push({ severity: 'error', code: 'actual_arrival_before_departure', message: 'Actual arrival is before actual departure.' })
+  }
+  if (!flight.departure?.tz) out.push({ severity: 'warning', code: 'missing_departure_timezone', message: 'Departure airport has no IANA timezone; local times may be unreliable.' })
+  if (!flight.arrival?.tz) out.push({ severity: 'warning', code: 'missing_arrival_timezone', message: 'Arrival airport has no IANA timezone; local times may be unreliable.' })
+  if (flight.departure?.iata && flight.arrival?.iata && flight.departure.iata === flight.arrival.iata) out.push({ severity: 'warning', code: 'same_airport', message: 'Departure and arrival airports are the same.' })
+  if (flight.aircraft?.registration && !/^[A-Z0-9-]{2,12}$/i.test(flight.aircraft.registration)) out.push({ severity: 'warning', code: 'invalid_registration', message: 'Aircraft registration looks malformed.' })
+  if (flight.cancelled && flight.actualArrival) out.push({ severity: 'info', code: 'cancelled_with_arrival', message: 'Flight is marked cancelled but has an actual arrival time.' })
+  if (flight.divertedTo && flight.divertedTo === (flight.arrival?.iata ?? flight.arrival?.icao)) out.push({ severity: 'info', code: 'diversion_same_as_destination', message: 'Diversion destination matches the scheduled destination.' })
+  // duration thresholds
+  const durationMin = (arr.getTime() - dep.getTime()) / 60000
+  if (durationMin < 0) out.push({ severity: 'error', code: 'negative_duration', message: 'Flight duration is negative.' })
+  if (durationMin > 24 * 60) out.push({ severity: 'warning', code: 'long_duration', message: 'Flight duration exceeds 24 hours.' })
+  if (!flight.aircraft) out.push({ severity: 'warning', code: 'missing_aircraft', message: 'Aircraft details are unavailable.' })
+  return out
+}
+
+// ===== Trip layover helpers =====
+
+export function layoverMinutes(arrivalIso: string, nextDepartureIso: string): number {
+  const a = Date.parse(arrivalIso)
+  const b = Date.parse(nextDepartureIso)
+  if (!Number.isFinite(a) || !Number.isFinite(b)) return NaN
+  return Math.round((b - a) / 60000)
+}
+
+export function isTightLayover(minutes: number, domestic: boolean): boolean {
+  if (!Number.isFinite(minutes)) return false
+  const threshold = domestic ? 60 : 90
+  return minutes < threshold
 }

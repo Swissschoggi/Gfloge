@@ -72,6 +72,8 @@ export async function buildServer() {
   registerDomainRoutes(app)
   const { registerTripRoutes } = await import('./routes/trips.js')
   registerTripRoutes(app)
+  const { registerShareRoutes } = await import('./routes/share.js')
+  registerShareRoutes(app)
   const { registerAccountRoutes } = await import('./routes/account.js')
   registerAccountRoutes(app)
   const { registerExploreRoutes } = await import('./routes/explore.js')
@@ -86,6 +88,12 @@ export async function buildServer() {
   registerTravelRiskRoutes(app)
   const { registerFlightDiscoveryRoutes } = await import('./routes/flight-discovery.js')
   registerFlightDiscoveryRoutes(app)
+  const { registerAircraftRoutes } = await import('./routes/aircraft.js')
+  registerAircraftRoutes(app)
+  const { registerCalendarRoutes } = await import('./routes/calendar.js')
+  registerCalendarRoutes(app)
+  const { registerPushRoutes } = await import('./routes/push.js')
+  registerPushRoutes(app)
 
   app.get('/api/health', async () => {
     const providersSnapshot = await providers.statusSnapshot()

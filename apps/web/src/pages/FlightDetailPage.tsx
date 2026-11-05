@@ -7,7 +7,9 @@ import { formatDate, formatDistance, formatDuration, formatLocal, sameUtcDay } f
 import { ConditionChip, StatusBadge } from '../components/StatusPresentation'
 import { TrackMap } from '../components/TrackMap'
 import { FlightProgress } from '../components/FlightProgress'
+import { diagnoseFlight } from '@gfloge/shared'
 import { ActivityFeed } from '../components/ActivityFeed'
+import { exportFlightCardPng } from '../lib/exportImage'
 
 const today = () => new Date().toISOString()
 
@@ -15,9 +17,16 @@ export function FlightDetailPage() {
   const { flightId = '' } = useParams()
   const navigate = useNavigate()
   const queryClient = useQueryClient()
+  const createShare = useMutation({
+    mutationFn: (userFlightId: string) => api.post<{ token: string; url: string }>('/api/v1/share/flights', { userFlightId }),
+    onSuccess: (data) => setShareToken(data.token),
+    onError: (cause) => setShareError(cause instanceof Error ? cause.message : 'Could not create share link'),
+  })
   const isManual = flightId.startsWith('manual:')
   const manualId = isManual ? flightId.slice(7) : null
   const [editing, setEditing] = useState(false)
+  const [shareToken, setShareToken] = useState<string | null>(null)
+  const [shareError, setShareError] = useState<string | null>(null)
   const [editError, setEditError] = useState<string | null>(null)
 
   const updateFlight = useMutation({
@@ -135,7 +144,7 @@ export function FlightDetailPage() {
         <h1 className="hero__code">{f.flightCode}</h1>
         <div className="hero__route flight-detail-route">
           <div className="hero__end">
-            <span className="hero__iata">{f.departure.iata}</span>
+            <span className="hero__iata">{f.departure.iata ?? f.departure.icao}</span>
             <span className="hero__city">{f.departure.city}</span>
           </div>
           <span className="hero__arrow" aria-hidden="true">
@@ -143,7 +152,7 @@ export function FlightDetailPage() {
             {f.distanceKm !== null && <span className="hero__distance">{formatDistance(f.distanceKm)}</span>}
           </span>
           <div className="hero__end hero__end--arr">
-            <span className="hero__iata">{f.arrival.iata}</span>
+            <span className="hero__iata">{f.arrival.iata ?? f.arrival.icao}</span>
             <span className="hero__city">{f.arrival.city}</span>
           </div>
         </div>
@@ -173,14 +182,17 @@ export function FlightDetailPage() {
              </div>
            )}
            {f.fieldSources && Object.keys(f.fieldSources).length > 0 && (
-             <p className="form-note">Manually corrected: {Object.keys(f.fieldSources).join(', ')}</p>
+             <div className="data-panel">
+               <h2 className="data-panel__title">Corrected fields</h2>
+               <p className="form-note" style={{ margin: 0 }}>You overrode provider data for: {Object.keys(f.fieldSources).join(', ')}.</p>
+             </div>
            )}
           {(alerts.data?.alerts ?? []).map((a) => (
             <div className="alertbanner" role="alert" key={a.id}>
               <strong>Update:</strong>
               <span>
                 {a.type === 'time_shift'
-                  ? `Departure moved to ${formatLocal(newDateAsIso(a.new), f.departure.tz)} ${f.departure.iata} local (was ${formatLocal(
+                  ? `Departure moved to ${formatLocal(newDateAsIso(a.new), f.departure.tz)} ${(f.departure.iata ?? f.departure.icao)} local (was ${formatLocal(
                       oldDateAsIso(a.old),
                       f.departure.tz
                     )})`
@@ -190,20 +202,19 @@ export function FlightDetailPage() {
           ))}
 
           <div className="data-panel">
-            <h2 className="data-panel__title">Times</h2>
-            <TimeRow label={isHistoricalObservation ? 'Observed departure' : 'Scheduled departure'} value={f.scheduledDeparture} tz={f.departure.tz} airport={f.departure.iata} />
-            {f.actualDeparture && <TimeRow label="Actual departure" value={f.actualDeparture} tz={f.departure.tz} airport={f.departure.iata} />}
-            <TimeRow label={isHistoricalObservation ? 'Observed arrival' : 'Scheduled arrival'} value={f.scheduledArrival} tz={f.arrival.tz} airport={f.arrival.iata} />
-            {f.actualArrival && <TimeRow label="Actual arrival" value={f.actualArrival} tz={f.arrival.tz} airport={f.arrival.iata} />}
-            {(f.depGate || f.depTerminal || f.arrGate || f.arrTerminal) && (
-              <div className="readout-row">
-                <span className="readout-row__label">Gates</span>
-                <span className="readout-row__value">
-                  {[f.depTerminal, f.depGate].filter(Boolean).join(' / ') || 'not published'} →{' '}
-                  {[f.arrTerminal, f.arrGate].filter(Boolean).join(' / ') || 'not published'}
-                </span>
-              </div>
-            )}
+            <h2 className="data-panel__title">Flight operations</h2>
+            <TimeRow label={isHistoricalObservation ? 'Observed departure' : 'Scheduled departure'} value={f.scheduledDeparture} tz={f.departure.tz} airport={f.departure.iata ?? f.departure.icao} />
+            {f.actualDeparture && <TimeRow label="Actual departure" value={f.actualDeparture} tz={f.departure.tz} airport={f.departure.iata ?? f.departure.icao} />}
+            {f.actualDeparture && (() => {
+              const delay = Math.round((new Date(f.actualDeparture).getTime() - new Date(f.scheduledDeparture).getTime()) / 60000)
+              return delay !== 0 ? <div className="readout-row"><span className="readout-row__label">Departure delay</span><span className="readout-row__value">{delay > 0 ? `+${delay} min` : `${delay} min`}</span></div> : null
+            })()}
+            <TimeRow label={isHistoricalObservation ? 'Observed arrival' : 'Scheduled arrival'} value={f.scheduledArrival} tz={f.arrival.tz} airport={f.arrival.iata ?? f.arrival.icao} />
+            {f.actualArrival && <TimeRow label="Actual arrival" value={f.actualArrival} tz={f.arrival.tz} airport={f.arrival.iata ?? f.arrival.icao} />}
+            {f.actualArrival && (() => {
+              const delay = Math.round((new Date(f.actualArrival).getTime() - new Date(f.scheduledArrival).getTime()) / 60000)
+              return delay !== 0 ? <div className="readout-row"><span className="readout-row__label">Arrival delay</span><span className="readout-row__value">{delay > 0 ? `+${delay} min` : `${delay} min`}</span></div> : null
+            })()}
             <div className="readout-row">
               <span className="readout-row__label">Duration</span>
               <span className="readout-row__value">
@@ -214,6 +225,12 @@ export function FlightDetailPage() {
                 )}
               </span>
             </div>
+            {(f.depTerminal || f.depGate || f.arrTerminal || f.arrGate) && (
+              <div className="readout-row">
+                <span className="readout-row__label">Terminals / gates</span>
+                <span className="readout-row__value">{[f.depTerminal, f.depGate].filter(Boolean).join(' / ') || 'not recorded'} → {[f.arrTerminal, f.arrGate].filter(Boolean).join(' / ') || 'not recorded'}</span>
+              </div>
+            )}
           </div>
 
           {(f.aircraft && (f.aircraft.registration || f.aircraft.icaoType)) || f.seatType || f.bookingReference || f.flightReason || f.sourceName || f.cancelled || f.divertedTo || f.depTerminal || f.depGate || f.arrTerminal || f.arrGate ? (
@@ -223,7 +240,7 @@ export function FlightDetailPage() {
                   <h2 className="data-panel__title">Aircraft</h2>
                   <div className="readout-row">
                     <span className="readout-row__label">Registration</span>
-                    <span className="readout-row__value">{f.aircraft.registration ?? 'not recorded'}</span>
+                    <span className="readout-row__value">{f.aircraft.registration ? <Link to={`/aircraft/${encodeURIComponent(f.aircraft.registration)}`}>{f.aircraft.registration}</Link> : 'not recorded'}</span>
                   </div>
                   <div className="readout-row">
                     <span className="readout-row__label">Type</span>
@@ -233,22 +250,9 @@ export function FlightDetailPage() {
                   </div>
                 </div>
               )}
-              {(f.depTerminal || f.depGate || f.arrTerminal || f.arrGate) && (
-                <div className="data-panel">
-                  <h2 className="data-panel__title">Airport operations</h2>
-                  <div className="readout-row">
-                    <span className="readout-row__label">Departure terminal / gate</span>
-                    <span className="readout-row__value">{[f.depTerminal, f.depGate].filter(Boolean).join(' / ') || 'not recorded'}</span>
-                  </div>
-                  <div className="readout-row">
-                    <span className="readout-row__label">Arrival terminal / gate</span>
-                    <span className="readout-row__value">{[f.arrTerminal, f.arrGate].filter(Boolean).join(' / ') || 'not recorded'}</span>
-                  </div>
-                </div>
-              )}
               {(f.seatType || f.bookingReference || f.flightReason || f.sourceName || f.cancelled || f.divertedTo) && (
                 <div className="data-panel">
-                  <h2 className="data-panel__title">Personal record</h2>
+                  <h2 className="data-panel__title">Your experience</h2>
                   {f.seatType && <div className="readout-row"><span className="readout-row__label">Seat type</span><span className="readout-row__value">{f.seatType}</span></div>}
                   {f.bookingReference && <div className="readout-row"><span className="readout-row__label">Booking reference</span><span className="readout-row__value">{f.bookingReference}</span></div>}
                   {f.flightReason && <div className="readout-row"><span className="readout-row__label">Reason</span><span className="readout-row__value">{f.flightReason}</span></div>}
@@ -269,13 +273,6 @@ export function FlightDetailPage() {
               )}
             </>
           ) : null}
-
-          <div className="data-panel">
-            <h2 className="data-panel__title">Airport weather</h2>
-            <ConditionChip condition="unavailable" />
-            <p className="form-note">Weather observations are not available for this flight.</p>
-            <div className="weather-pair"><span>{f.departure.iata} · {f.departure.tz}</span><span>{f.arrival.iata} · {f.arrival.tz}</span></div>
-          </div>
 
           {relation.data && relation.data.role === 'logged' ? (
             <LogEditor
@@ -327,8 +324,39 @@ export function FlightDetailPage() {
           <ManualEditForm flight={f} onSave={(payload) => updateFlight.mutate(payload)} saving={updateFlight.isPending} error={editError} />
         </section>
       )}
+      {relation.data && (
+        <section className="data-panel" style={{ marginTop: 'var(--space-m)' }}>
+          <h2 className="data-panel__title">Sharing</h2>
+          <p className="form-note" style={{ marginBottom: 'var(--space-s)' }}>Create a read-only public link for this flight.</p>
+          <button type="button" className="btn-outline" disabled={createShare.isPending} onClick={() => { if (relation.data) createShare.mutate(relation.data.id) }}>
+            {createShare.isPending ? 'Creating…' : 'Create share link'}
+          </button>
+          {shareToken && <p className="form-note" role="status">Share URL: /share/flight/{shareToken}</p>}
+          <button type="button" className="btn-outline" style={{ marginTop: 'var(--space-2xs)' }} onClick={() => exportFlightCardPng({
+            flightCode: f.flightCode,
+            airlineName: f.airline?.name ?? null,
+            depCode: (f.departure.iata ?? f.departure.icao) ?? '',
+            arrCode: (f.arrival.iata ?? f.arrival.icao) ?? '',
+            departureTime: formatLocal(f.actualDeparture ?? f.scheduledDeparture, f.departure.tz),
+            arrivalTime: formatLocal(f.actualArrival ?? f.scheduledArrival, f.arrival.tz),
+            duration: formatDuration(Math.round((new Date(f.actualArrival ?? f.scheduledArrival).getTime() - new Date(f.actualDeparture ?? f.scheduledDeparture).getTime()) / 60000)),
+            status: f.status,
+          })}>Export PNG</button>
+          {shareError && <p role="alert" className="form-error">{shareError}</p>}
+        </section>
+      )}
+      {(() => {
+        const diagnostics = diagnoseFlight(f)
+        if (diagnostics.length === 0) return null
+        return (
+          <section className="data-panel" style={{ marginTop: 'var(--space-m)' }}>
+            <h2 className="data-panel__title">Data quality</h2>
+            <ul>{diagnostics.map((d) => <li key={d.code} className={d.severity === 'error' ? 'form-error' : 'form-note'}>{d.message}</li>)}</ul>
+          </section>
+        )
+      })()}
       <section className="data-panel" style={{ marginTop: 'var(--space-m)' }}>
-        <h2 className="data-panel__title">Activity</h2>
+        <h2 className="data-panel__title">Activity history</h2>
         <ActivityFeed flightId={flightId} />
       </section>
     </article>

@@ -1,6 +1,6 @@
 {
-  "id": "3774229a-d1a0-4e40-a45e-b1c5295f1282",
-  "prevId": "f9898003-364a-4fc8-9fbf-aeb37209af82",
+  "id": "4dbac46a-2695-4054-a6b5-e9e4afb07d66",
+  "prevId": "3774229a-d1a0-4e40-a45e-b1c5295f1282",
   "version": "7",
   "dialect": "postgresql",
   "tables": {
@@ -336,7 +336,7 @@
           "name": "tz",
           "type": "text",
           "primaryKey": false,
-          "notNull": true
+          "notNull": false
         },
         "source": {
           "name": "source",
@@ -1476,6 +1476,12 @@
           "primaryKey": false,
           "notNull": false
         },
+        "field_sources": {
+          "name": "field_sources",
+          "type": "jsonb",
+          "primaryKey": false,
+          "notNull": false
+        },
         "import_batch_id": {
           "name": "import_batch_id",
           "type": "uuid",
@@ -2506,6 +2512,121 @@
       "checkConstraints": {},
       "isRLSEnabled": false
     },
+    "public.share_links": {
+      "name": "share_links",
+      "schema": "",
+      "columns": {
+        "id": {
+          "name": "id",
+          "type": "uuid",
+          "primaryKey": true,
+          "notNull": true,
+          "default": "gen_random_uuid()"
+        },
+        "user_id": {
+          "name": "user_id",
+          "type": "uuid",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "resource_type": {
+          "name": "resource_type",
+          "type": "share_resource_type",
+          "typeSchema": "public",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "resource_id": {
+          "name": "resource_id",
+          "type": "uuid",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "token_hash": {
+          "name": "token_hash",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "expires_at": {
+          "name": "expires_at",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "revoked_at": {
+          "name": "revoked_at",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "created_at": {
+          "name": "created_at",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "now()"
+        }
+      },
+      "indexes": {
+        "share_links_token_key": {
+          "name": "share_links_token_key",
+          "columns": [
+            {
+              "expression": "token_hash",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": true,
+          "concurrently": false,
+          "method": "btree",
+          "with": {}
+        },
+        "share_links_user_idx": {
+          "name": "share_links_user_idx",
+          "columns": [
+            {
+              "expression": "user_id",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            },
+            {
+              "expression": "resource_type",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": false,
+          "concurrently": false,
+          "method": "btree",
+          "with": {}
+        }
+      },
+      "foreignKeys": {
+        "share_links_user_id_users_id_fk": {
+          "name": "share_links_user_id_users_id_fk",
+          "tableFrom": "share_links",
+          "tableTo": "users",
+          "columnsFrom": [
+            "user_id"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "cascade",
+          "onUpdate": "no action"
+        }
+      },
+      "compositePrimaryKeys": {},
+      "uniqueConstraints": {},
+      "policies": {},
+      "checkConstraints": {},
+      "isRLSEnabled": false
+    },
     "public.trips": {
       "name": "trips",
       "schema": "",
@@ -3000,6 +3121,14 @@
       "values": [
         "instance",
         "env"
+      ]
+    },
+    "public.share_resource_type": {
+      "name": "share_resource_type",
+      "schema": "public",
+      "values": [
+        "flight",
+        "trip"
       ]
     },
     "public.theme_pref": {

@@ -86,6 +86,7 @@ export function BoardPage() {
           <FlightAtlas
             items={filtered}
             selected={selected}
+            onSelectFlight={(id) => { if (id) updateParam('flight', id) }}
           />
           {!board.isPending && !board.isError && <SelectedFlight item={selected} empty={allItems.length === 0} noMatches={filtered.length === 0 && allItems.length > 0} onClearFilters={clearFilters} />}
         </div>
@@ -143,9 +144,9 @@ export function BoardPage() {
               </div>
             ) : (
               <div className="manifest-groups">
-                <ManifestGroup title="In the air" items={active} selectedId={selected?.userFlightId ?? null} onSelect={(id) => updateParam('flight', id)} />
-                <ManifestGroup title="Upcoming" items={upcoming} selectedId={selected?.userFlightId ?? null} onSelect={(id) => updateParam('flight', id)} />
-                <ManifestGroup title="Recently landed" items={landed} selectedId={selected?.userFlightId ?? null} onSelect={(id) => updateParam('flight', id)} />
+                {active.length > 0 && <ManifestGroup title="In the air" items={active} selectedId={selected?.userFlightId ?? null} onSelect={(id) => updateParam('flight', id)} />}
+                {upcoming.length > 0 && <ManifestGroup title="Upcoming" items={upcoming} selectedId={selected?.userFlightId ?? null} onSelect={(id) => updateParam('flight', id)} />}
+                {landed.length > 0 && <ManifestGroup title="Recently landed" items={landed} selectedId={selected?.userFlightId ?? null} onSelect={(id) => updateParam('flight', id)} />}
               </div>
             )}
           </div>
@@ -254,9 +255,9 @@ function SelectedFlight({
         </div>
       </div>
       <div className="selected-flight__route">
-        <div><strong>{flight.departure.iata}</strong><span>{flight.departure.city}</span><time>{formatLocal(flight.scheduledDeparture, flight.departure.tz)} · {flight.departure.iata} local</time></div>
+        <div><strong>{flight.departure.iata ?? flight.departure.icao}</strong><span>{flight.departure.city}</span><time>{formatLocal(flight.scheduledDeparture, flight.departure.tz)} · {flight.departure.iata} local</time></div>
         <span className="selected-flight__line" aria-hidden="true" />
-        <div><strong>{flight.arrival.iata}</strong><span>{flight.arrival.city}</span><time>{item.condition === 'fresh' ? formatLocal(arrivalIso, flight.arrival.tz) : 'Time unavailable'} · {flight.arrival.iata} local</time></div>
+        <div><strong>{flight.arrival.iata ?? flight.arrival.icao}</strong><span>{flight.arrival.city}</span><time>{item.condition === 'fresh' ? formatLocal(arrivalIso, flight.arrival.tz) : 'Time unavailable'} · {flight.arrival.iata} local</time></div>
       </div>
       <FlightProgress status={flight.status} departure={flight.actualDeparture ?? flight.scheduledDeparture} arrival={flight.actualArrival ?? flight.scheduledArrival} />
       <div className="selected-flight__actions">
